@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2022-12-11
+
+[fdf5044](fdf5044a3d0812fc4eb4290b90f084173ab179cb)...[7949054](7949054a9b7f57f12489565d6185a4001f862b1e)
+
+### Bug Fixes
+
+- Lsi sk should be mandatory ([7949054](7949054a9b7f57f12489565d6185a4001f862b1e) - 2022-12-11 by Tyr Chen)
+
 ## [0.1.2] - 2022-12-11
 
 [60d04cc](60d04cca0eee440f3b90e76b9dca1a2ab5c52fc5)...[fdf5044](fdf5044a3d0812fc4eb4290b90f084173ab179cb)

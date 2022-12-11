@@ -127,14 +127,19 @@ impl From<TableLsi> for LocalSecondaryIndex {
     fn from(lsi: TableLsi) -> Self {
         let pk = lsi.pk.to_pk();
         let sk = lsi.sk.map(|sk| sk.to_sk());
+        let projection = if lsi.attrs.is_empty() {
+            Projection::builder()
+                .projection_type(ProjectionType::All)
+                .build()
+        } else {
+            Projection::builder()
+                .projection_type(ProjectionType::Include)
+                .set_non_key_attributes(Some(lsi.attrs))
+                .build()
+        };
         let lsi = LocalSecondaryIndex::builder()
             .key_schema(pk)
-            .projection(
-                Projection::builder()
-                    .projection_type(ProjectionType::Include)
-                    .set_non_key_attributes(Some(lsi.attrs))
-                    .build(),
-            )
+            .projection(projection)
             .index_name(lsi.name);
 
         let lsi = if let Some(sk) = sk {

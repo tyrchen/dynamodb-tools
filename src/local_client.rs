@@ -7,19 +7,20 @@ use tokio::runtime::Runtime;
 pub struct LocalClient {
     client: Option<Client>,
     table_name: String,
+    skip_delete: bool,
 }
 
 /// helper function to create a local client easily
-pub async fn local_client(config: impl AsRef<Path>) -> LocalClient {
+pub async fn local_client(config: impl AsRef<Path>, skip_delete: bool) -> LocalClient {
     let config = TableConfig::load_from_file(config).expect("valid config");
-    LocalClient::try_new(8000, config)
+    LocalClient::try_new(8000, config, skip_delete)
         .await
         .expect("should create")
 }
 
 #[inline(always)]
-pub async fn get_client(config: impl AsRef<Path>) -> impl DynamoClient {
-    local_client(config).await
+pub async fn get_client(config: impl AsRef<Path>, skip_delete: bool) -> impl DynamoClient {
+    local_client(config, skip_delete).await
 }
 
 impl DynamoClient for LocalClient {
@@ -36,7 +37,7 @@ impl DynamoClient for LocalClient {
 
 impl LocalClient {
     /// create a new local client
-    pub async fn try_new(port: u16, table_config: TableConfig) -> Result<Self> {
+    pub async fn try_new(port: u16, table_config: TableConfig, skip_delete: bool) -> Result<Self> {
         let config = aws_config::load_from_env().await;
         let mut input = CreateTableInput::try_from(table_config)?;
         let table_name = format!("{}-{}", input.table_name.unwrap(), xid::new());
@@ -68,6 +69,7 @@ impl LocalClient {
         Ok(Self {
             client: Some(client),
             table_name,
+            skip_delete,
         })
     }
 
@@ -84,6 +86,9 @@ impl Drop for LocalClient {
     fn drop(&mut self) {
         let client = self.client.take().expect("client");
         let table_name = self.table_name.clone();
+        if self.skip_delete {
+            return;
+        }
         thread::spawn(move || {
             let rt = Runtime::new().expect("runtime");
             rt.block_on(async move {
@@ -102,7 +107,7 @@ mod tests {
     #[tokio::test]
     async fn test_local_client() {
         let config = TableConfig::load_from_file("fixtures/config.yml").unwrap();
-        let client = LocalClient::try_new(8000, config).await.unwrap();
+        let client = LocalClient::try_new(8000, config, false).await.unwrap();
         let (client, table_name) = client.inner();
         let resp = client
             .describe_table()

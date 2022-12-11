@@ -1,0 +1,23 @@
+[package]
+name = "dynamodb-tester"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+documentation = "https://docs.rs/dynamodb-tester"
+repository = "https://github.com/tyrchen/dynamodb-tester"
+homepage = "https://github.com/tyrchen/dynamodb-tester"
+description = """
+A simple library to make the test your code against dynamodb local easy.
+"""
+readme = "README.md"
+categories = ["development-tools::testing"]
+keywords = [ "aws-sdk", "dynamodb", "testing"]
+
+[dependencies]
+anyhow = "1.0.66"
+aws-config = "0.51.0"
+aws-sdk-dynamodb = "0.21.0"
+serde = { version = "1.0.149", features = ["derive"] }
+serde_yaml = "0.9.14"
+tokio = { version = "1.23.0", features = ["macros", "rt", "rt-multi-thread"] }
+xid = "1.0.3"

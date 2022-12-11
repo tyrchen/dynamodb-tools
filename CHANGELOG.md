@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2022-12-11
+
+[4ca018e](4ca018ea460b5e803c2ce8eb70fec2903abd5227)...[41af7f2](41af7f23951fd1a335523961805b301f76447f25)
+
+### Features
+
+- Allow drop table to be optional ([41af7f2](41af7f23951fd1a335523961805b301f76447f25) - 2022-12-11 by Tyr Chen)
+
 ## [0.2.0] - 2022-12-11
 
 [7949054](7949054a9b7f57f12489565d6185a4001f862b1e)...[4ca018e](4ca018ea460b5e803c2ce8eb70fec2903abd5227)

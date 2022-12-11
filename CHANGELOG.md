@@ -2,7 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.1.1] - 2022-12-11
+
+### Bug Fixes
+
+- Fix gh action ([44a31be](44a31be6824a5b0e4ed430625f489caa2363c804) - 2022-12-11 by Tyr Chen)
+- Export TableConfig ([60d04cc](60d04cca0eee440f3b90e76b9dca1a2ab5c52fc5) - 2022-12-11 by Tyr Chen)
 
 ### Features
 

@@ -1,0 +1,37 @@
+---
+table_name: users
+local_endpoint: http://localhost:8000
+delete_on_exit: true
+info:
+  table_name: users
+  pk:
+    name: pk
+    type: S
+  sk:
+    name: sk
+    type: S
+  attrs:
+    - name: gsi1pk
+      type: S
+    - name: gsi1sk
+      type: S
+    - name: lsi1sk
+      type: S
+  gsis:
+    - name: gsi1
+      pk:
+        name: gsi1pk
+        type: S
+      sk:
+        name: gsi1sk
+        type: S
+      attrs:
+        - pk
+  lsis:
+    - name: lsi1
+      pk:
+        name: pk
+        type: S
+      sk:
+        name: lsi1sk
+        type: S

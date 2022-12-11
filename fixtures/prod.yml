@@ -1,0 +1,3 @@
+---
+table_name: users
+delete_on_exit: true

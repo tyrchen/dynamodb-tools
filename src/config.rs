@@ -1,5 +1,3 @@
-use std::{fs::File, io::BufReader, path::Path};
-
 use anyhow::{Error, Result};
 use aws_sdk_dynamodb::{
     input::CreateTableInput,
@@ -9,9 +7,23 @@ use aws_sdk_dynamodb::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::{fs::File, io::BufReader, path::Path};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableConfig {
+    pub table_name: String,
+    /// local endpoints, if provided, dynamodb connector will connect dynamodb local
+    #[serde(default)]
+    pub(crate) local_endpoint: Option<String>,
+    /// drop table when connector is dropped. Would only work if local_endpoint is provided
+    #[serde(default)]
+    pub(crate) delete_on_exit: bool,
+    /// table info
+    pub(crate) info: Option<TableInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableInfo {
     pub table_name: String,
     pub pk: TableAttr,
     #[serde(default)]
@@ -145,9 +157,9 @@ impl From<TableLsi> for LocalSecondaryIndex {
     }
 }
 
-impl TryFrom<TableConfig> for CreateTableInput {
+impl TryFrom<TableInfo> for CreateTableInput {
     type Error = Error;
-    fn try_from(config: TableConfig) -> Result<Self> {
+    fn try_from(config: TableInfo) -> Result<Self> {
         let pk = config.pk.to_pk();
         let sk = config.sk.as_ref().map(|sk| sk.to_sk());
 
@@ -200,6 +212,35 @@ impl TableConfig {
         let config = serde_yaml::from_reader(reader)?;
         Ok(config)
     }
+
+    pub fn new(
+        table_name: String,
+        local_endpoint: Option<String>,
+        delete_on_exit: bool,
+        info: Option<TableInfo>,
+    ) -> Self {
+        let delete_on_exit = if local_endpoint.is_some() {
+            delete_on_exit
+        } else {
+            false
+        };
+
+        Self {
+            table_name,
+            local_endpoint,
+            delete_on_exit,
+            info,
+        }
+    }
+}
+
+impl TableInfo {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let config = serde_yaml::from_reader(reader)?;
+        Ok(config)
+    }
 }
 
 #[cfg(test)]
@@ -208,15 +249,25 @@ mod tests {
 
     #[test]
     fn config_could_be_loaded() {
-        let config = TableConfig::load_from_file("fixtures/config.yml").unwrap();
+        let config = TableConfig::load_from_file("fixtures/dev.yml").unwrap();
+
+        let info = config.info.expect("info should be present");
 
         assert_eq!(config.table_name, "users");
-        assert_eq!(config.pk.name, "pk");
-        assert_eq!(config.pk.attr_type, AttrType::S);
+        assert_eq!(info.pk.name, "pk");
+        assert_eq!(info.pk.attr_type, AttrType::S);
 
-        let input = CreateTableInput::try_from(config).unwrap();
+        let input = CreateTableInput::try_from(info).unwrap();
         assert_eq!(input.attribute_definitions().unwrap().len(), 5);
         assert_eq!(input.global_secondary_indexes().unwrap().len(), 1);
         assert_eq!(input.local_secondary_indexes().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn table_info_could_be_loaded() {
+        let info = TableInfo::load_from_file("fixtures/info.yml").unwrap();
+
+        assert_eq!(info.pk.name, "pk");
+        assert_eq!(info.pk.attr_type, AttrType::S);
     }
 }

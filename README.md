@@ -1,9 +1,8 @@
-# DynamoDB tester
+# DynamoDB tools
 
-WARNING! This crate is deprecated. I realized that instead of a pure tester, what I really need is a connector that can be used in different environment, e.g. dev/test/staging/prod. Please use [dynamodb-tools](https://github.com/tyrchen/dynamodb-tools) instead.
+This crate is previously called [dynamodb-tester](https://crates.io/crates/dynamodb-tester), but I decided to rename it to dynamodb-tools, because it is not only for testing.
 
-
-As AWS provided [DynamoDB local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html), we could leverage it in the tests. However, managing the dynamodb client and tables is tedious, we need to clean that up at the end of every test to not pollute other tests. This crate will help you to create tables with unique names and then tear them down after test ends (by using Drop trait if you ask).
+As AWS provided [DynamoDB local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html), we could leverage it in the development & test environment. However, managing the dynamodb client and tables is tedious, we need to clean that up at the end of every test to not pollute other tests. This crate will help you to create tables with unique names and then tear them down after test ends (by using Drop trait if you ask).
 
 ## Usage
 
@@ -19,14 +18,13 @@ In your test code, you could use it like this:
 
 ```rust
 // first, create the LocalClient
-use dynamodb_tester::LocalClient;
-let lc = LocalClient::try_new(8080, "users", None).await?;
-let (client, table_name) = lc.inner();
+use dynamodb_tools::DynamodbConnector;
+let connector = DynamodbConnector::try_new("fixtures/config.yml").await?;
 // then you could use the returned client & table_name
 // to interact with dynamodb local.
-let ret = client
+let ret = connector.client
     .put_item()
-    .table_name(table_name)
+    .table_name(connector.table_name().unwrap())
     .set_item(Some(item))
     .send()
     .await?;

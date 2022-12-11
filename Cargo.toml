@@ -1,27 +1,27 @@
 [package]
-name = "dynamodb-tester"
-version = "0.2.2"
+name = "dynamodb-tools"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
-documentation = "https://docs.rs/dynamodb-tester"
-repository = "https://github.com/tyrchen/dynamodb-tester"
-homepage = "https://github.com/tyrchen/dynamodb-tester"
+documentation = "https://docs.rs/dynamodb-tools"
+repository = "https://github.com/tyrchen/dynamodb-tools"
+homepage = "https://github.com/tyrchen/dynamodb-tools"
 description = """
-A simple library to make the test your code against dynamodb local easy.
+A simple library to work with dynamodb local easy.
 """
 readme = "README.md"
-categories = ["development-tools::testing"]
+categories = ["development-tools"]
 keywords = [ "aws-sdk", "dynamodb", "testing"]
 
 [features]
-default = ["local"]
-local = ["anyhow", "aws-config", "serde", "serde_yaml", "tokio", "xid"]
+default = ["connector"]
+connector = [ "aws-config", "tokio", "xid"]
 
 [dependencies]
-anyhow = { version = "1.0.66", optional = true }
+anyhow = { version = "1.0.66" }
 aws-config = { version = "0.51.0", optional = true }
 aws-sdk-dynamodb = { version = "0.21.0" }
-serde = { version = "1.0.149", features = ["derive"], optional = true }
-serde_yaml = { version = "0.9.14", optional = true }
+serde = { version = "1.0.149", features = ["derive"] }
+serde_yaml = { version = "0.9.14" }
 tokio = { version = "1.23.0", features = ["macros", "rt", "rt-multi-thread"], optional = true }
 xid = { version = "1.0.3", optional = true }

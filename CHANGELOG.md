@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2022-12-11
+
+[60d04cc](60d04cca0eee440f3b90e76b9dca1a2ab5c52fc5)...[fdf5044](fdf5044a3d0812fc4eb4290b90f084173ab179cb)
+
+### Bug Fixes
+
+- If attrs is empty, use all for lsi projection ([fdf5044](fdf5044a3d0812fc4eb4290b90f084173ab179cb) - 2022-12-11 by Tyr Chen)
+
 ## [0.1.1] - 2022-12-11
 
 ### Bug Fixes

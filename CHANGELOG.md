@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2022-12-11
+
+[7949054](7949054a9b7f57f12489565d6185a4001f862b1e)...[4ca018e](4ca018ea460b5e803c2ce8eb70fec2903abd5227)
+
+### Refactor
+
+- Move most of the code to local feature and provide DynamoClient trait ([4ca018e](4ca018ea460b5e803c2ce8eb70fec2903abd5227) - 2022-12-11 by Tyr Chen)
+
 ## [0.1.3] - 2022-12-11
 
 [fdf5044](fdf5044a3d0812fc4eb4290b90f084173ab179cb)...[7949054](7949054a9b7f57f12489565d6185a4001f862b1e)

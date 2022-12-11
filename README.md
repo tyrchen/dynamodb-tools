@@ -1,5 +1,8 @@
 # DynamoDB tester
 
+WARNING! This crate is deprecated. I realized that instead of a pure tester, what I really need is a connector that can be used in different environment, e.g. dev/test/staging/prod. Please use [dynamodb-tools](https://github.com/tyrchen/dynamodb-tools) instead.
+
+
 As AWS provided [DynamoDB local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html), we could leverage it in the tests. However, managing the dynamodb client and tables is tedious, we need to clean that up at the end of every test to not pollute other tests. This crate will help you to create tables with unique names and then tear them down after test ends (by using Drop trait if you ask).
 
 ## Usage

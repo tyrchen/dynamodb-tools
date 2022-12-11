@@ -1,11 +1,8 @@
 build:
 	@cargo build
 
-cov:
-	@cargo llvm-cov nextest --all-features --workspace --lcov --output-path coverage/lcov-$(shell date +%F).info
-
 test:
-	@CELLA_ENV=test cargo nextest run --all-features
+	@cargo nextest run --all-features
 
 release:
 	@cargo release tag --execute
@@ -14,4 +11,4 @@ release:
 	@git push origin master
 	@cargo release push --execute
 
-.PHONY: build cov test release
+.PHONY: build test release

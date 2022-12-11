@@ -2,7 +2,6 @@ mod config;
 
 use anyhow::Result;
 use aws_sdk_dynamodb::{input::CreateTableInput, Client, Endpoint};
-use config::TableConfig;
 use std::thread;
 use tokio::runtime::Runtime;
 
@@ -10,6 +9,8 @@ pub struct LocalClient {
     client: Option<Client>,
     table_name: String,
 }
+
+pub use config::TableConfig;
 
 impl LocalClient {
     /// create a new local client

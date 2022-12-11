@@ -31,6 +31,3 @@ lsis:
     sk:
       name: lsi1sk
       type: S
-    attrs:
-      - name
-      - email

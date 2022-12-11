@@ -53,8 +53,7 @@ pub struct TableLsi {
     pub name: String,
     // must be the same as the pk of the table
     pub pk: TableAttr,
-    #[serde(default)]
-    pub sk: Option<TableAttr>,
+    pub sk: TableAttr,
     #[serde(default)]
     pub attrs: Vec<String>,
 }
@@ -99,12 +98,18 @@ impl From<TableGsi> for GlobalSecondaryIndex {
     fn from(gsi: TableGsi) -> Self {
         let pk = gsi.pk.to_pk();
         let sk = gsi.sk.map(|sk| sk.to_sk());
+
+        let key_schema = if let Some(sk) = sk {
+            vec![pk, sk]
+        } else {
+            vec![pk]
+        };
         let pt = ProvisionedThroughput::builder()
             .read_capacity_units(5)
             .write_capacity_units(5)
             .build();
-        let gsi = GlobalSecondaryIndex::builder()
-            .key_schema(pk)
+        GlobalSecondaryIndex::builder()
+            .set_key_schema(Some(key_schema))
             .projection(
                 Projection::builder()
                     .projection_type(ProjectionType::Include)
@@ -112,21 +117,16 @@ impl From<TableGsi> for GlobalSecondaryIndex {
                     .build(),
             )
             .provisioned_throughput(pt)
-            .index_name(gsi.name);
-
-        let gsi = if let Some(sk) = sk {
-            gsi.key_schema(sk)
-        } else {
-            gsi
-        };
-        gsi.build()
+            .index_name(gsi.name)
+            .build()
     }
 }
 
 impl From<TableLsi> for LocalSecondaryIndex {
     fn from(lsi: TableLsi) -> Self {
         let pk = lsi.pk.to_pk();
-        let sk = lsi.sk.map(|sk| sk.to_sk());
+        let sk = lsi.sk.to_sk();
+        let key_schema = vec![pk, sk];
         let projection = if lsi.attrs.is_empty() {
             Projection::builder()
                 .projection_type(ProjectionType::All)
@@ -137,17 +137,11 @@ impl From<TableLsi> for LocalSecondaryIndex {
                 .set_non_key_attributes(Some(lsi.attrs))
                 .build()
         };
-        let lsi = LocalSecondaryIndex::builder()
-            .key_schema(pk)
+        LocalSecondaryIndex::builder()
+            .set_key_schema(Some(key_schema))
             .projection(projection)
-            .index_name(lsi.name);
-
-        let lsi = if let Some(sk) = sk {
-            lsi.key_schema(sk)
-        } else {
-            lsi
-        };
-        lsi.build()
+            .index_name(lsi.name)
+            .build()
     }
 }
 

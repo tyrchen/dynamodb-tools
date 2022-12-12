@@ -4,6 +4,7 @@ use aws_sdk_dynamodb::{input::CreateTableInput, Client, Endpoint};
 use std::{path::Path, thread};
 use tokio::runtime::Runtime;
 
+#[derive(Debug, Clone)]
 pub struct DynamodbConnector {
     client: Option<Client>,
     table_name: String,

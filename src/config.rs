@@ -241,6 +241,11 @@ impl TableInfo {
         let config = serde_yaml::from_reader(reader)?;
         Ok(config)
     }
+
+    pub fn load(s: &str) -> Result<Self> {
+        let config = serde_yaml::from_str(s)?;
+        Ok(config)
+    }
 }
 
 #[cfg(test)]

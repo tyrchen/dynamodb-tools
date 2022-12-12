@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2022-12-12
+
+[7caa3ec](7caa3ecb80942c68e4e98620ea208ce5a2489190)...[0855106](0855106aafc0ba8fe025dbdb726cbdd5cd7b47b9)
+
+### Refactor
+
+- Repurpose the local tester to connector ([0855106](0855106aafc0ba8fe025dbdb726cbdd5cd7b47b9) - 2022-12-11 by Tyr Chen)
+
 ## [0.2.1] - 2022-12-11
 
 [4ca018e](4ca018ea460b5e803c2ce8eb70fec2903abd5227)...[41af7f2](41af7f23951fd1a335523961805b301f76447f25)

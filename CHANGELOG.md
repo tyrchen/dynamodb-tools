@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2022-12-12
+
+[0855106](0855106aafc0ba8fe025dbdb726cbdd5cd7b47b9)...[69e41ee](69e41ee4a3ce8ef6408f0dfc8cd5a14a75c36fe8)
+
+### Miscellaneous Tasks
+
+- Add Debug/Clone for DynamodbConnector, support load for TableInfo ([69e41ee](69e41ee4a3ce8ef6408f0dfc8cd5a14a75c36fe8) - 2022-12-12 by Tyr Chen)
+
 ## [0.3.0] - 2022-12-12
 
 [7caa3ec](7caa3ecb80942c68e4e98620ea208ce5a2489190)...[0855106](0855106aafc0ba8fe025dbdb726cbdd5cd7b47b9)

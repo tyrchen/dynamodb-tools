@@ -46,7 +46,7 @@ impl DynamodbConnector {
             );
 
         let config = if let Some(url) = local_endpoint.as_ref() {
-            config.endpoint_resolver(Endpoint::immutable(url.parse()?))
+            config.endpoint_resolver(Endpoint::immutable(url)?)
         } else {
             config
         };

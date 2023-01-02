@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2023-01-02
+
+[69e41ee](69e41ee4a3ce8ef6408f0dfc8cd5a14a75c36fe8)...[9ee055d](9ee055ddf4540040f0e43320c0f423bfea0e91ed)
+
+### Features
+
+- Upgrade aws deps to latest version (not ready to release yet since the ecosystem hasn't picked 0.52 up yet) ([c20247e](c20247e6b21b5a8a68fda1446b88a129531af77f) - 2022-12-14 by Tyr Chen)
+
 ## [0.3.1] - 2022-12-12
 
 [0855106](0855106aafc0ba8fe025dbdb726cbdd5cd7b47b9)...[69e41ee](69e41ee4a3ce8ef6408f0dfc8cd5a14a75c36fe8)

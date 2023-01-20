@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2023-01-20
+
+[9ee055d](9ee055ddf4540040f0e43320c0f423bfea0e91ed)...[73ed694](73ed694daf8d04920a83eb3997ccc5655d9cccfa)
+
+### Miscellaneous Tasks
+
+- Upgrade aws sdk and fix endpoint deprecation issue ([73ed694](73ed694daf8d04920a83eb3997ccc5655d9cccfa) - 2023-01-20 by Tyr Chen)
+
 ## [0.3.3] - 2023-01-02
 
 [69e41ee](69e41ee4a3ce8ef6408f0dfc8cd5a14a75c36fe8)...[9ee055d](9ee055ddf4540040f0e43320c0f423bfea0e91ed)

@@ -1,6 +1,6 @@
 use crate::TableConfig;
 use anyhow::Result;
-use aws_sdk_dynamodb::{input::CreateTableInput, Client, Endpoint};
+use aws_sdk_dynamodb::{input::CreateTableInput, Client};
 use std::{path::Path, thread};
 use tokio::runtime::Runtime;
 
@@ -46,7 +46,7 @@ impl DynamodbConnector {
             );
 
         let config = if let Some(url) = local_endpoint.as_ref() {
-            config.endpoint_resolver(Endpoint::immutable(url)?)
+            config.endpoint_url(url)
         } else {
             config
         };

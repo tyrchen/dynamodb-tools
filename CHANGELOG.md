@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5] - 2023-02-03
+
+[73ed694](73ed694daf8d04920a83eb3997ccc5655d9cccfa)...[a54ffe0](a54ffe0919bb00cfd1613569b717c2bbe21c0ff9)
+
+### Miscellaneous Tasks
+
+- Bump dynamodb version ([a54ffe0](a54ffe0919bb00cfd1613569b717c2bbe21c0ff9) - 2023-02-03 by Tyr Chen)
+
 ## [0.3.4] - 2023-01-20
 
 [9ee055d](9ee055ddf4540040f0e43320c0f423bfea0e91ed)...[73ed694](73ed694daf8d04920a83eb3997ccc5655d9cccfa)

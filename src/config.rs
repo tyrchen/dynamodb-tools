@@ -1,9 +1,10 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
 use aws_sdk_dynamodb::{
     operation::create_table::CreateTableInput,
     types::{
-        AttributeDefinition, GlobalSecondaryIndex, KeySchemaElement, KeyType, LocalSecondaryIndex,
-        Projection, ProjectionType, ProvisionedThroughput, ScalarAttributeType,
+        AttributeDefinition, BillingMode, GlobalSecondaryIndex, KeySchemaElement, KeyType,
+        LocalSecondaryIndex, Projection, ProjectionType, ProvisionedThroughput,
+        ScalarAttributeType,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,14 @@ pub struct TableInfo {
     pub gsis: Vec<TableGsi>,
     #[serde(default)]
     pub lsis: Vec<TableLsi>,
+    #[serde(default)]
+    pub throughput: Option<Throughput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Throughput {
+    pub read: i64,
+    pub write: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +67,8 @@ pub struct TableGsi {
     pub sk: Option<TableAttr>,
     #[serde(default)]
     pub attrs: Vec<String>,
+    #[serde(default)]
+    pub throughput: Option<Throughput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +98,7 @@ impl From<TableAttr> for AttributeDefinition {
             .attribute_name(attr.name)
             .attribute_type(attr_type)
             .build()
-            .unwrap()
+            .expect("attr should be valid")
     }
 }
 
@@ -97,7 +108,7 @@ impl TableAttr {
             .attribute_name(self.name.clone())
             .key_type(KeyType::Hash)
             .build()
-            .unwrap()
+            .expect("pk should be valid")
     }
 
     fn to_sk(&self) -> KeySchemaElement {
@@ -105,7 +116,7 @@ impl TableAttr {
             .attribute_name(self.name.clone())
             .key_type(KeyType::Range)
             .build()
-            .unwrap()
+            .expect("sk should be valid")
     }
 }
 
@@ -119,12 +130,8 @@ impl From<TableGsi> for GlobalSecondaryIndex {
         } else {
             vec![pk]
         };
-        let pt = ProvisionedThroughput::builder()
-            .read_capacity_units(5)
-            .write_capacity_units(5)
-            .build()
-            .unwrap();
-        GlobalSecondaryIndex::builder()
+
+        let mut builder = GlobalSecondaryIndex::builder()
             .set_key_schema(Some(key_schema))
             .projection(
                 Projection::builder()
@@ -132,10 +139,18 @@ impl From<TableGsi> for GlobalSecondaryIndex {
                     .set_non_key_attributes(Some(gsi.attrs))
                     .build(),
             )
-            .provisioned_throughput(pt)
-            .index_name(gsi.name)
-            .build()
-            .unwrap()
+            // .provisioned_throughput(pt)
+            .index_name(gsi.name);
+
+        if let Some(throughput) = gsi.throughput {
+            let pt = ProvisionedThroughput::builder()
+                .read_capacity_units(throughput.read)
+                .write_capacity_units(throughput.write)
+                .build()
+                .expect("throughput should be valid");
+            builder = builder.provisioned_throughput(pt);
+        }
+        builder.build().expect("gsi should be valid")
     }
 }
 
@@ -159,13 +174,12 @@ impl From<TableLsi> for LocalSecondaryIndex {
             .projection(projection)
             .index_name(lsi.name)
             .build()
-            .unwrap()
+            .expect("lsi should be valid")
     }
 }
 
-impl TryFrom<TableInfo> for CreateTableInput {
-    type Error = Error;
-    fn try_from(config: TableInfo) -> Result<Self> {
+impl From<TableInfo> for CreateTableInput {
+    fn from(config: TableInfo) -> Self {
         let pk = config.pk.to_pk();
         let sk = config.sk.as_ref().map(|sk| sk.to_sk());
 
@@ -195,20 +209,28 @@ impl TryFrom<TableInfo> for CreateTableInput {
             .map(LocalSecondaryIndex::from)
             .collect();
 
-        let pt = ProvisionedThroughput::builder()
-            .read_capacity_units(5)
-            .write_capacity_units(5)
-            .build()
-            .unwrap();
-        let input = CreateTableInput::builder()
+        let mut builder = CreateTableInput::builder()
             .table_name(config.table_name)
             .set_key_schema(Some(key_schema))
             .set_attribute_definitions(Some(attrs))
             .set_global_secondary_indexes(Some(gsis))
-            .set_local_secondary_indexes(Some(lsis))
-            .provisioned_throughput(pt);
+            .set_local_secondary_indexes(Some(lsis));
 
-        Ok(input.build()?)
+        match config.throughput {
+            Some(throughput) => {
+                let pt = ProvisionedThroughput::builder()
+                    .read_capacity_units(throughput.read)
+                    .write_capacity_units(throughput.write)
+                    .build()
+                    .expect("throughput should be valid");
+                builder = builder.provisioned_throughput(pt);
+            }
+            None => {
+                builder = builder.billing_mode(BillingMode::PayPerRequest);
+            }
+        }
+
+        builder.build().expect("table info should be valid")
     }
 }
 

@@ -63,19 +63,29 @@ impl DynamodbConnector {
 
         let table_name = if let Some(info) = table_config.info {
             let mut input = CreateTableInput::try_from(info)?;
-            let table_name = format!("{}-{}", input.table_name.unwrap(), xid::new());
+            let table_name = format!(
+                "{}-{}",
+                input.table_name.expect("table name must exist"),
+                xid::new()
+            );
             input.table_name = Some(table_name.clone());
 
-            client
+            let mut req = client
                 .create_table()
                 .table_name(&table_name)
                 .set_key_schema(input.key_schema)
                 .set_attribute_definitions(input.attribute_definitions)
                 .set_global_secondary_indexes(input.global_secondary_indexes)
-                .set_local_secondary_indexes(input.local_secondary_indexes)
-                .provisioned_throughput(input.provisioned_throughput.take().unwrap())
-                .send()
-                .await?;
+                .set_local_secondary_indexes(input.local_secondary_indexes);
+            match input.provisioned_throughput {
+                Some(pt) => {
+                    req = req.provisioned_throughput(pt);
+                }
+                None => {
+                    req = req.billing_mode(input.billing_mode.expect("billing mode should exist"));
+                }
+            }
+            req.send().await?;
             table_name
         } else {
             table_config.table_name

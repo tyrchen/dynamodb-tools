@@ -1,13 +1,16 @@
 use crate::TableConfig;
 use anyhow::Result;
-use aws_sdk_dynamodb::{input::CreateTableInput, Client};
-use std::{path::Path, thread};
+use aws_config::BehaviorVersion;
+use aws_sdk_dynamodb::{operation::create_table::CreateTableInput, Client};
+use std::path::Path;
+#[cfg(test)]
 use tokio::runtime::Runtime;
 
 #[derive(Debug, Clone)]
 pub struct DynamodbConnector {
     client: Option<Client>,
     table_name: String,
+    #[cfg(test)]
     delete_on_exit: bool,
 }
 
@@ -29,6 +32,7 @@ impl DynamodbConnector {
     /// create a new local client
     pub async fn try_new(table_config: TableConfig) -> Result<Self> {
         let local_endpoint = table_config.local_endpoint.clone();
+        #[cfg(test)]
         let delete_on_exit = if local_endpoint.is_some() {
             table_config.delete_on_exit
         } else {
@@ -38,6 +42,11 @@ impl DynamodbConnector {
 
         let config = aws_sdk_dynamodb::Config::builder()
             .region(config.region().cloned())
+            .behavior_version(
+                config
+                    .behavior_version()
+                    .unwrap_or(BehaviorVersion::latest()),
+            )
             .credentials_provider(
                 config
                     .credentials_provider()
@@ -75,19 +84,22 @@ impl DynamodbConnector {
         Ok(Self {
             client: Some(client),
             table_name,
+            #[cfg(test)]
             delete_on_exit,
         })
     }
 }
 
+#[cfg(test)]
 impl Drop for DynamodbConnector {
     fn drop(&mut self) {
         let client = self.client.take().expect("client");
         let table_name = self.table_name.clone();
+        #[cfg(test)]
         if !self.delete_on_exit {
             return;
         }
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             let rt = Runtime::new().expect("runtime");
             rt.block_on(async move {
                 if let Err(e) = client.delete_table().table_name(&table_name).send().await {

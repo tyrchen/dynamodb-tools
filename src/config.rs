@@ -1,7 +1,7 @@
 use anyhow::{Error, Result};
 use aws_sdk_dynamodb::{
-    input::CreateTableInput,
-    model::{
+    operation::create_table::CreateTableInput,
+    types::{
         AttributeDefinition, GlobalSecondaryIndex, KeySchemaElement, KeyType, LocalSecondaryIndex,
         Projection, ProjectionType, ProvisionedThroughput, ScalarAttributeType,
     },
@@ -87,6 +87,7 @@ impl From<TableAttr> for AttributeDefinition {
             .attribute_name(attr.name)
             .attribute_type(attr_type)
             .build()
+            .unwrap()
     }
 }
 
@@ -96,6 +97,7 @@ impl TableAttr {
             .attribute_name(self.name.clone())
             .key_type(KeyType::Hash)
             .build()
+            .unwrap()
     }
 
     fn to_sk(&self) -> KeySchemaElement {
@@ -103,6 +105,7 @@ impl TableAttr {
             .attribute_name(self.name.clone())
             .key_type(KeyType::Range)
             .build()
+            .unwrap()
     }
 }
 
@@ -119,7 +122,8 @@ impl From<TableGsi> for GlobalSecondaryIndex {
         let pt = ProvisionedThroughput::builder()
             .read_capacity_units(5)
             .write_capacity_units(5)
-            .build();
+            .build()
+            .unwrap();
         GlobalSecondaryIndex::builder()
             .set_key_schema(Some(key_schema))
             .projection(
@@ -131,6 +135,7 @@ impl From<TableGsi> for GlobalSecondaryIndex {
             .provisioned_throughput(pt)
             .index_name(gsi.name)
             .build()
+            .unwrap()
     }
 }
 
@@ -154,6 +159,7 @@ impl From<TableLsi> for LocalSecondaryIndex {
             .projection(projection)
             .index_name(lsi.name)
             .build()
+            .unwrap()
     }
 }
 
@@ -192,7 +198,8 @@ impl TryFrom<TableInfo> for CreateTableInput {
         let pt = ProvisionedThroughput::builder()
             .read_capacity_units(5)
             .write_capacity_units(5)
-            .build();
+            .build()
+            .unwrap();
         let input = CreateTableInput::builder()
             .table_name(config.table_name)
             .set_key_schema(Some(key_schema))
@@ -263,9 +270,9 @@ mod tests {
         assert_eq!(info.pk.attr_type, AttrType::S);
 
         let input = CreateTableInput::try_from(info).unwrap();
-        assert_eq!(input.attribute_definitions().unwrap().len(), 5);
-        assert_eq!(input.global_secondary_indexes().unwrap().len(), 1);
-        assert_eq!(input.local_secondary_indexes().unwrap().len(), 1);
+        assert_eq!(input.attribute_definitions().len(), 5);
+        assert_eq!(input.global_secondary_indexes().len(), 1);
+        assert_eq!(input.local_secondary_indexes().len(), 1);
     }
 
     #[test]

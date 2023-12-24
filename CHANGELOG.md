@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2023-12-24
+
+[a54ffe0](a54ffe0919bb00cfd1613569b717c2bbe21c0ff9)...[791e5b1](791e5b18cb7b7228ab12b4e4158eee52d025d7cb)
+
+### Features
+
+- Upgrade aws sdk ([dc0ed1a](dc0ed1ae29a61bd1c290b5a4dfbffcbefc18801f) - 2023-12-24 by Tyr Chen)
+
 ## [0.3.5] - 2023-02-03
 
 [73ed694](73ed694daf8d04920a83eb3997ccc5655d9cccfa)...[a54ffe0](a54ffe0919bb00cfd1613569b717c2bbe21c0ff9)

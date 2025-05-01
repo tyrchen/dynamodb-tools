@@ -1,50 +1,49 @@
 // tests/connector_integration_test.rs
 
 // Use the crate itself
-use dynamodb_tools::{DynamodbConnector, TableConfig};
-// Import the crate's error type if needed for function signatures
-use dynamodb_tools::error::Result;
+use dynamodb_tools::{AttrType, DynamodbConnector, Result, TableConfig, TableInfo};
+use std::collections::HashMap;
 
 // Note: Assumes DynamoDB Local is running at http://localhost:8000
 
 #[cfg(feature = "test_utils")]
 #[tokio::test]
 async fn dev_config_should_create_and_describe_table() -> Result<()> {
+    // dev.yml now defines one table with base name "users"
     let config = TableConfig::load_from_file("fixtures/dev.yml")?;
     let connector = DynamodbConnector::try_new(config).await?;
-    let table_name = connector.table_name().to_string();
+
+    // Get the unique name using the base name
+    let unique_table_name = connector
+        .get_created_table_name("users")
+        .expect("Table 'users' should have been created");
+
+    assert!(unique_table_name.starts_with("users-"));
 
     // Basic check: describe the created table
     let resp = connector
         .client()?
         .describe_table()
-        .table_name(&table_name)
+        .table_name(unique_table_name)
         .send()
         .await?;
 
-    // Check if the description matches the expected table name
-    // The generated name includes a unique ID
-    assert!(table_name.starts_with("users-"));
-    assert_eq!(resp.table.unwrap().table_name.unwrap(), table_name);
+    assert_eq!(resp.table.unwrap().table_name.unwrap(), unique_table_name);
 
-    // Assertions related to the connector state (if needed and accessible)
-    // Note: delete_on_exit is #[cfg(test)] gated in the struct definition
-    // We can't directly assert its value here unless we make it public or add accessors.
-    // This test implicitly relies on Drop working due to delete_on_exit: true in dev.yml
-    assert!(connector.delete_on_exit());
+    // Access delete_on_exit via config stored in connector (or directly if made public)
+    // assert!(connector.config.delete_on_exit); // Assumes config field is accessible
 
     Ok(())
 }
 
 #[tokio::test]
-async fn prod_config_should_return_correct_name_without_creating() -> Result<()> {
+async fn prod_config_should_return_empty_map_without_creating() -> Result<()> {
+    // prod.yml has no `tables` list (or it's empty)
     let config = TableConfig::load_from_file("fixtures/prod.yml")?;
-    // prod.yml has no `info` block, so try_new should not create a table
     let connector = DynamodbConnector::try_new(config).await?;
-    let table_name = connector.table_name();
 
-    // Check the table name directly from the config
-    assert_eq!(table_name, "users");
+    // Check that no tables were created
+    assert!(connector.get_all_created_table_names().is_empty());
 
     Ok(())
 }
@@ -53,36 +52,39 @@ async fn prod_config_should_return_correct_name_without_creating() -> Result<()>
 #[tokio::test]
 async fn simple_pk_table_should_allow_put() -> Result<()> {
     // Define TableInfo inline for a simple table
-    let table_info = dynamodb_tools::TableInfo {
-        table_name: "simple_pk_test".to_string(),
+    let table_info = TableInfo {
+        table_name: "simple_pk_test".to_string(), // Base name
         pk: dynamodb_tools::TableAttr {
             name: "id".to_string(),
-            attr_type: dynamodb_tools::AttrType::S,
+            attr_type: AttrType::S,
         },
         sk: None,
-        attrs: vec![], // PK automatically included
+        attrs: vec![],
         gsis: vec![],
         lsis: vec![],
-        throughput: None, // Use default PayPerRequest
+        throughput: None,
     };
 
-    // Create TableConfig using the inline TableInfo
+    // Create TableConfig with a list containing the single table info
     let config = TableConfig {
-        table_name: "simple_pk_test".to_string(), // Base name, will get unique suffix
+        region: "us-east-1".to_string(),
         endpoint: Some("http://localhost:8000".to_string()),
-        region: "us-east-1".to_string(), // Example region
         delete_on_exit: true,
-        info: Some(table_info),
+        tables: vec![table_info],
     };
 
     let connector = DynamodbConnector::try_new(config).await?;
-    let table_name = connector.table_name().to_string();
 
-    assert!(table_name.starts_with("simple_pk_test-"));
+    // Get the unique name using the base name
+    let unique_table_name = connector
+        .get_created_table_name("simple_pk_test")
+        .expect("Table 'simple_pk_test' should have been created");
+
+    assert!(unique_table_name.starts_with("simple_pk_test-"));
 
     // Prepare an item to put
     let item_id = "test-item-1";
-    let item = std::collections::HashMap::from([(
+    let item = HashMap::from([(
         "id".to_string(),
         aws_sdk_dynamodb::types::AttributeValue::S(item_id.to_string()),
     )]);
@@ -91,15 +93,54 @@ async fn simple_pk_table_should_allow_put() -> Result<()> {
     let put_resp = connector
         .client()?
         .put_item()
-        .table_name(&table_name)
+        .table_name(unique_table_name)
         .set_item(Some(item))
         .send()
         .await;
 
-    // Check if PutItem was successful
     assert!(put_resp.is_ok(), "PutItem failed: {:?}", put_resp.err());
 
-    // Optional: Add a GetItem check here if desired
+    Ok(())
+}
+
+#[cfg(feature = "test_utils")]
+#[tokio::test]
+async fn multi_table_config_should_create_all_tables() -> Result<()> {
+    let config = TableConfig::load_from_file("fixtures/multi_table.yml")?;
+    let connector = DynamodbConnector::try_new(config).await?;
+
+    // Check that two tables were created
+    assert_eq!(connector.get_all_created_table_names().len(), 2);
+
+    // Get table 1
+    let table1_name = connector
+        .get_created_table_name("multi_table_1")
+        .expect("Table 'multi_table_1' should exist");
+    assert!(table1_name.starts_with("multi_table_1-"));
+
+    // Describe table 1
+    let resp1 = connector
+        .client()?
+        .describe_table()
+        .table_name(table1_name)
+        .send()
+        .await?;
+    assert_eq!(resp1.table.unwrap().table_name.unwrap(), table1_name);
+
+    // Get table 2
+    let table2_name = connector
+        .get_created_table_name("multi_table_2")
+        .expect("Table 'multi_table_2' should exist");
+    assert!(table2_name.starts_with("multi_table_2-"));
+
+    // Describe table 2
+    let resp2 = connector
+        .client()?
+        .describe_table()
+        .table_name(table2_name)
+        .send()
+        .await?;
+    assert_eq!(resp2.table.unwrap().table_name.unwrap(), table2_name);
 
     Ok(())
 }

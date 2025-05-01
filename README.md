@@ -22,6 +22,7 @@ use dynamodb_tools::{DynamodbConnector, TableConfig};
 use anyhow::Result;
 use serde_dynamo::to_item;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Item {
@@ -31,12 +32,17 @@ struct Item {
   gsi1sk: String,
 }
 
+// Add feature gate comment
+// Requires feature `test_utils` if using delete_on_exit: true
 #[tokio::main]
 async fn main() -> Result<()> {
   let config = TableConfig::load_from_file("fixtures/dev.yml")?;
   let connector = DynamodbConnector::try_new(config).await?;
-  // then you could use the returned client & table_name
-  // to interact with dynamodb local.
+
+  // Get the actual created table name using the base name from config
+  let actual_table_name = connector.get_created_table_name("users")
+                           .expect("Table 'users' should have been created");
+
   let item = to_item(Item {
     pk: "1".to_string(),
     sk: "1".to_string(),
@@ -46,7 +52,7 @@ async fn main() -> Result<()> {
 
   let ret = connector.client()?
       .put_item()
-      .table_name(connector.table_name())
+      .table_name(actual_table_name) // Use the retrieved unique name
       .set_item(Some(item))
       .send()
       .await?;

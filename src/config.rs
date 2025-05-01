@@ -8,17 +8,15 @@ use aws_sdk_dynamodb::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::{fs::File, io::BufReader, path::Path};
 
 /// Represents the main configuration loaded from a YAML file.
 ///
 /// This struct defines the overall settings for connecting to DynamoDB,
-/// including endpoint, region, and table-specific details.
+/// including endpoint, region, and definitions for one or more tables.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableConfig {
-    /// The base name for the DynamoDB table. If `info` is provided,
-    /// a unique ID will be appended to this name for the created table.
-    pub table_name: String,
     /// AWS region to target. Defaults to "us-east-1" if not specified.
     #[serde(default = "default_aws_region")]
     pub region: String,
@@ -26,22 +24,23 @@ pub struct TableConfig {
     /// If provided, the connector targets this endpoint and uses test credentials.
     #[serde(default)]
     pub endpoint: Option<String>,
-    /// If `true` and `endpoint` is set, the created table will be deleted
+    /// If `true` and `endpoint` is set, created tables will be deleted
     /// when the `DynamodbConnector` is dropped (requires `test_utils` feature).
     #[serde(default)]
     pub delete_on_exit: bool,
-    /// Optional detailed table schema information used for table creation.
-    /// If `None`, no table will be created by the connector.
+    /// A list of table schemas to be managed by the connector.
     #[serde(default)]
-    pub info: Option<TableInfo>,
+    pub tables: Vec<TableInfo>,
 }
 
-/// Defines the detailed schema for a DynamoDB table.
+/// Defines the detailed schema for a single DynamoDB table.
 ///
-/// Used within [`TableConfig`] when table creation is desired.
+/// Used within the `tables` list in [`TableConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableInfo {
-    /// The base name of the table (used for deriving the created table name).
+    /// The base name of the table. A unique ID will be appended
+    /// by the connector upon creation (e.g., `my_table` becomes `my_table-unique_id`).
+    /// This base name is used to retrieve the actual table name later.
     pub table_name: String,
     /// The primary partition key attribute definition.
     pub pk: TableAttr,
@@ -230,42 +229,63 @@ impl TryFrom<TableInfo> for CreateTableInput {
     type Error = DynamoToolsError;
 
     fn try_from(config: TableInfo) -> Result<Self> {
-        let pk = config.pk.to_pk();
-        let sk = config.sk.as_ref().map(|sk| sk.to_sk());
+        // Use a HashMap to collect unique attribute definitions by name
+        let mut attribute_map: HashMap<String, TableAttr> = HashMap::new();
 
-        let key_schema = if let Some(sk) = sk {
-            vec![pk, sk]
-        } else {
-            vec![pk]
-        };
-
-        // add pk and sk to attrs
-        let mut attrs = config.attrs.clone();
-        attrs.push(config.pk);
-        if let Some(sk) = config.sk {
-            attrs.push(sk);
+        // 1. Add base table keys
+        attribute_map.insert(config.pk.name.clone(), config.pk.clone());
+        if let Some(ref sk) = config.sk {
+            attribute_map.insert(sk.name.clone(), sk.clone());
         }
-        let attrs: Vec<_> = attrs.into_iter().map(AttributeDefinition::from).collect();
 
-        // Add explicit types for collected vectors
+        // 2. Add GSI keys
+        for gsi in &config.gsis {
+            attribute_map.insert(gsi.pk.name.clone(), gsi.pk.clone());
+            if let Some(ref sk) = gsi.sk {
+                attribute_map.insert(sk.name.clone(), sk.clone());
+            }
+        }
+
+        // 4. Add LSI keys
+        for lsi in &config.lsis {
+            attribute_map.insert(lsi.sk.name.clone(), lsi.sk.clone());
+        }
+
+        // Convert the unique attributes to AttributeDefinition vector
+        let final_attrs: Vec<AttributeDefinition> = attribute_map
+            .into_values()
+            .map(AttributeDefinition::from)
+            .collect();
+
+        // --- Key Schema (remains the same) ---
+        let pk_schema = config.pk.to_pk();
+        let sk_schema = config.sk.as_ref().map(|sk| sk.to_sk());
+        let key_schema = if let Some(sk) = sk_schema {
+            vec![pk_schema, sk]
+        } else {
+            vec![pk_schema]
+        };
+        // --- End Key Schema ---
+
+        // --- GSI/LSI Conversion (remains the same) ---
         let gsis: Vec<GlobalSecondaryIndex> = config
             .gsis
             .into_iter()
             .map(GlobalSecondaryIndex::from)
             .collect();
-
         let lsis: Vec<LocalSecondaryIndex> = config
             .lsis
             .into_iter()
             .map(LocalSecondaryIndex::from)
             .collect();
+        // --- End GSI/LSI ---
 
+        // --- Build CreateTableInput ---
         let mut builder = CreateTableInput::builder()
             .table_name(config.table_name)
             .set_key_schema(Some(key_schema))
-            .set_attribute_definitions(Some(attrs));
+            .set_attribute_definitions(Some(final_attrs)); // Use the final collected attrs
 
-        // Only set indexes if the vectors are not empty
         if !gsis.is_empty() {
             builder = builder.set_global_secondary_indexes(Some(gsis));
         }
@@ -291,6 +311,7 @@ impl TryFrom<TableInfo> for CreateTableInput {
                 builder = builder.billing_mode(BillingMode::PayPerRequest);
             }
         }
+        // --- End Build ---
 
         builder.build().map_err(DynamoToolsError::AwsSdkConfig)
     }
@@ -298,6 +319,8 @@ impl TryFrom<TableInfo> for CreateTableInput {
 
 impl TableConfig {
     /// Loads [`TableConfig`] from a YAML file.
+    ///
+    /// Expects a top-level structure with keys like `region`, `endpoint`, `tables` (a list).
     ///
     /// # Errors
     ///
@@ -316,11 +339,10 @@ impl TableConfig {
 
     /// Creates a new `TableConfig` programmatically.
     pub fn new(
-        table_name: String,
         region: String,
         endpoint: Option<String>,
         delete_on_exit: bool,
-        info: Option<TableInfo>,
+        tables: Vec<TableInfo>,
     ) -> Self {
         let delete_on_exit = if endpoint.is_some() {
             delete_on_exit
@@ -329,11 +351,10 @@ impl TableConfig {
         };
 
         Self {
-            table_name,
             region,
             endpoint,
             delete_on_exit,
-            info,
+            tables,
         }
     }
 }
@@ -397,12 +418,12 @@ mod tests {
     #[test]
     fn config_could_be_loaded() {
         let config = TableConfig::load_from_file("fixtures/dev.yml").unwrap();
-        assert_eq!(config.table_name, "users");
+        assert_eq!(config.region, "us-east-1");
         assert_eq!(config.endpoint, Some("http://localhost:8000".to_string()));
         assert!(config.delete_on_exit);
-        assert!(config.info.is_some());
+        assert!(!config.tables.is_empty());
 
-        let info = config.info.unwrap();
+        let info = config.tables[0].clone();
         assert_eq!(info.table_name, "users");
         assert_eq!(info.pk.name, "pk");
         assert_eq!(info.pk.attr_type, AttrType::S);

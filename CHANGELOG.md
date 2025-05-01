@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
-## [unreleased]
+## [0.5.0](https://github.com/tyrchen/dynamodb-tools/compare/v0.4.0..v0.5.0) - 2025-05-01
 
 ### Features
 
@@ -12,17 +12,26 @@ All notable changes to this project will be documented in this file. See [conven
 - add extra integration tests - ([0f0ff9c](https://github.com/tyrchen/dynamodb-tools/commit/0f0ff9c500370fdfde9e5daa14d485d29a8cead2)) - Tyr Chen
 - add doc test - ([8257262](https://github.com/tyrchen/dynamodb-tools/commit/825726284622f69d619b0fc17daa74c9599e8ebe)) - Tyr Chen
 - support multi table - ([8c8e603](https://github.com/tyrchen/dynamodb-tools/commit/8c8e603d351bce82578f8591a0a81a2988bc9181)) - Tyr Chen
-- support seed data - ([b12cd67](https://github.com/tyrchen/dynamodb-tools/commit/b12cd67ee320ca756b847e65211c81d00e1a9352)) - Tyr Chen
+- support seed data - ([f58290b](https://github.com/tyrchen/dynamodb-tools/commit/f58290b03e628645d9ce93ca329fd995b821d51d)) - Tyr Chen
 
 ### Miscellaneous Chores
 
 - bump version for deps - ([fb8fbd6](https://github.com/tyrchen/dynamodb-tools/commit/fb8fbd6dca10e738f2852a7603da87c951e74df8)) - Tyr Chen
 - add cursor rules - ([8cc6298](https://github.com/tyrchen/dynamodb-tools/commit/8cc62988fde7e276383c281462dc81a1c7c7123a)) - Tyr Chen
 - initialize memory bank - ([b1b600a](https://github.com/tyrchen/dynamodb-tools/commit/b1b600a9da72dbaf285cf4fe81a5654cbcf3052c)) - Tyr Chen
+- disable test_utils feature - ([5048f12](https://github.com/tyrchen/dynamodb-tools/commit/5048f129aff7c7f52881f9c0abbb53b892d4b943)) - Tyr Chen
 
 ### Other
 
 - Update CHANGELOG.md - ([f189441](https://github.com/tyrchen/dynamodb-tools/commit/f1894414cbfa5820e54da64c8615fff548e3561d)) - Tyr Chen
+- Merge pull request #1 from tyrchen/feature/upgrade
+
+Update based on AI's suggestions. Supported:
+
+more unit test cases
+add integration test
+support multiple table.
+Note: this is a breaking change. - ([179b12f](https://github.com/tyrchen/dynamodb-tools/commit/179b12f17e58d07bdc5772aa2562dccdff31ce21)) - Tyr Chen
 
 ---
 ## [0.4.0](https://github.com/tyrchen/dynamodb-tools/compare/v0.3.5..v0.4.0) - 2023-12-24

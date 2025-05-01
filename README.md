@@ -18,16 +18,40 @@ In your test code, you could use it like this:
 
 ```rust
 // first, create the LocalClient
-use dynamodb_tools::DynamodbConnector;
-let connector = DynamodbConnector::try_new("fixtures/config.yml").await?;
-// then you could use the returned client & table_name
-// to interact with dynamodb local.
-let ret = connector.client
-    .put_item()
-    .table_name(connector.table_name().unwrap())
-    .set_item(Some(item))
-    .send()
-    .await?;
+use dynamodb_tools::{DynamodbConnector, TableConfig};
+use anyhow::Result;
+use serde_dynamo::to_item;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Item {
+  pk: String,
+  sk: String,
+  gsi1pk: String,
+  gsi1sk: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+  let config = TableConfig::load_from_file("fixtures/dev.yml")?;
+  let connector = DynamodbConnector::try_new(config).await?;
+  // then you could use the returned client & table_name
+  // to interact with dynamodb local.
+  let item = to_item(Item {
+    pk: "1".to_string(),
+    sk: "1".to_string(),
+    gsi1pk: "1".to_string(),
+    gsi1sk: "1".to_string(),
+  })?;
+
+  let ret = connector.client()?
+      .put_item()
+      .table_name(connector.table_name())
+      .set_item(Some(item))
+      .send()
+      .await?;
+  Ok(())
+}
 ```
 
 If you want to integrate it with github action, you could use [this action](https://github.com/rrainn/dynamodb-action):
@@ -39,5 +63,3 @@ If you want to integrate it with github action, you could use [this action](http
   port: 8000
   cors: '*'
 ```
-
-See [build.yml](.github/workflows/build.yml) for more details.

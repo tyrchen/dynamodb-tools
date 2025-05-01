@@ -10,81 +10,122 @@ use aws_sdk_dynamodb::{
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::BufReader, path::Path};
 
+/// Represents the main configuration loaded from a YAML file.
+///
+/// This struct defines the overall settings for connecting to DynamoDB,
+/// including endpoint, region, and table-specific details.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableConfig {
+    /// The base name for the DynamoDB table. If `info` is provided,
+    /// a unique ID will be appended to this name for the created table.
     pub table_name: String,
-    /// AWS region, if provided, dynamodb connector will connect to the region
+    /// AWS region to target. Defaults to "us-east-1" if not specified.
     #[serde(default = "default_aws_region")]
     pub region: String,
-    /// local endpoints, if provided, dynamodb connector will connect dynamodb local
+    /// Optional local endpoint URL (e.g., "http://localhost:8000" for DynamoDB Local).
+    /// If provided, the connector targets this endpoint and uses test credentials.
     #[serde(default)]
     pub endpoint: Option<String>,
-    /// drop table when connector is dropped. Would only work if local_endpoint is provided
+    /// If `true` and `endpoint` is set, the created table will be deleted
+    /// when the `DynamodbConnector` is dropped (requires `test_utils` feature).
     #[serde(default)]
     pub delete_on_exit: bool,
-    /// table info
+    /// Optional detailed table schema information used for table creation.
+    /// If `None`, no table will be created by the connector.
     #[serde(default)]
     pub info: Option<TableInfo>,
 }
 
+/// Defines the detailed schema for a DynamoDB table.
+///
+/// Used within [`TableConfig`] when table creation is desired.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableInfo {
+    /// The base name of the table (used for deriving the created table name).
     pub table_name: String,
+    /// The primary partition key attribute definition.
     pub pk: TableAttr,
+    /// Optional primary sort key attribute definition.
     #[serde(default)]
     pub sk: Option<TableAttr>,
+    /// Additional attribute definitions beyond the primary keys.
+    /// PK and SK attributes are automatically included, no need to repeat here.
     #[serde(default)]
     pub attrs: Vec<TableAttr>,
+    /// Global Secondary Index definitions.
     #[serde(default)]
     pub gsis: Vec<TableGsi>,
+    /// Local Secondary Index definitions.
     #[serde(default)]
     pub lsis: Vec<TableLsi>,
+    /// Optional provisioned throughput settings. If `None`, uses Pay-Per-Request billing.
     #[serde(default)]
     pub throughput: Option<Throughput>,
 }
 
+/// Defines provisioned throughput settings (read/write capacity units).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Throughput {
+    /// Read Capacity Units (RCU).
     pub read: i64,
+    /// Write Capacity Units (WCU).
     pub write: i64,
 }
 
+/// Defines a single DynamoDB attribute (name and type).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableAttr {
+    /// The name of the attribute.
     pub name: String,
+    /// The DynamoDB type of the attribute (S, N, B).
     #[serde(rename = "type")]
     pub attr_type: AttrType,
 }
 
+/// Represents the possible DynamoDB scalar attribute types.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AttrType {
+    /// String type.
     S,
+    /// Number type.
     N,
+    /// Binary type.
     B,
 }
 
+/// Defines a Global Secondary Index (GSI).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableGsi {
+    /// The name of the GSI.
     pub name: String,
+    /// The partition key attribute for the GSI.
     pub pk: TableAttr,
+    /// Optional sort key attribute for the GSI.
     #[serde(default)]
     pub sk: Option<TableAttr>,
+    /// Attributes to project into the GSI (only used if projection type is INCLUDE).
     #[serde(default)]
     pub attrs: Vec<String>,
+    /// Optional provisioned throughput for the GSI.
     #[serde(default)]
     pub throughput: Option<Throughput>,
 }
 
+/// Defines a Local Secondary Index (LSI).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableLsi {
+    /// The name of the LSI.
     pub name: String,
-    // must be the same as the pk of the table
+    /// The partition key attribute (must be the same as the table's PK).
     pub pk: TableAttr,
+    /// The sort key attribute for the LSI.
     pub sk: TableAttr,
+    /// Attributes to project into the LSI (only used if projection type is INCLUDE).
     #[serde(default)]
     pub attrs: Vec<String>,
 }
 
+// Internal helper function for default region
 fn default_aws_region() -> String {
     "us-east-1".to_string()
 }
@@ -256,6 +297,12 @@ impl TryFrom<TableInfo> for CreateTableInput {
 }
 
 impl TableConfig {
+    /// Loads [`TableConfig`] from a YAML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the file cannot be read ([`DynamoToolsError::ConfigRead`])
+    /// or if the YAML content cannot be parsed ([`DynamoToolsError::ConfigParse`]).
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
         let path_str = path_ref.to_string_lossy().to_string();
@@ -267,6 +314,7 @@ impl TableConfig {
         Ok(config)
     }
 
+    /// Creates a new `TableConfig` programmatically.
     pub fn new(
         table_name: String,
         region: String,
@@ -291,6 +339,14 @@ impl TableConfig {
 }
 
 impl TableInfo {
+    /// Loads [`TableInfo`] directly from a YAML file.
+    ///
+    /// Generally, it's preferred to load the full [`TableConfig`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the file cannot be read ([`DynamoToolsError::ConfigRead`])
+    /// or if the YAML content cannot be parsed ([`DynamoToolsError::ConfigParse`]).
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
         let path_str = path_ref.to_string_lossy().to_string();
@@ -302,6 +358,31 @@ impl TableInfo {
         Ok(info)
     }
 
+    /// Loads [`TableInfo`] directly from a YAML string.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the YAML string cannot be parsed ([`DynamoToolsError::ConfigParse`]).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dynamodb_tools::{TableInfo, AttrType};
+    ///
+    /// let yaml_data = r#"
+    /// table_name: my_simple_table
+    /// pk:
+    ///   name: item_id
+    ///   type: S
+    /// "#;
+    ///
+    /// let table_info = TableInfo::load(yaml_data).unwrap();
+    ///
+    /// assert_eq!(table_info.table_name, "my_simple_table");
+    /// assert_eq!(table_info.pk.name, "item_id");
+    /// assert_eq!(table_info.pk.attr_type, AttrType::S);
+    /// assert!(table_info.sk.is_none());
+    /// ```
     pub fn load(s: &str) -> Result<Self> {
         let info = serde_yaml::from_str(s)
             .map_err(|e| DynamoToolsError::ConfigParse("string input".to_string(), e))?;

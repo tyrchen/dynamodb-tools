@@ -15,15 +15,16 @@ pub struct TableConfig {
     pub table_name: String,
     /// AWS region, if provided, dynamodb connector will connect to the region
     #[serde(default = "default_aws_region")]
-    pub(crate) region: String,
+    pub region: String,
     /// local endpoints, if provided, dynamodb connector will connect dynamodb local
     #[serde(default)]
-    pub(crate) endpoint: Option<String>,
+    pub endpoint: Option<String>,
     /// drop table when connector is dropped. Would only work if local_endpoint is provided
     #[serde(default)]
-    pub(crate) delete_on_exit: bool,
+    pub delete_on_exit: bool,
     /// table info
-    pub(crate) info: Option<TableInfo>,
+    #[serde(default)]
+    pub info: Option<TableInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,15 +204,16 @@ impl TryFrom<TableInfo> for CreateTableInput {
         if let Some(sk) = config.sk {
             attrs.push(sk);
         }
-        let attrs = attrs.into_iter().map(AttributeDefinition::from).collect();
+        let attrs: Vec<_> = attrs.into_iter().map(AttributeDefinition::from).collect();
 
-        let gsis = config
+        // Add explicit types for collected vectors
+        let gsis: Vec<GlobalSecondaryIndex> = config
             .gsis
             .into_iter()
             .map(GlobalSecondaryIndex::from)
             .collect();
 
-        let lsis = config
+        let lsis: Vec<LocalSecondaryIndex> = config
             .lsis
             .into_iter()
             .map(LocalSecondaryIndex::from)
@@ -220,9 +222,15 @@ impl TryFrom<TableInfo> for CreateTableInput {
         let mut builder = CreateTableInput::builder()
             .table_name(config.table_name)
             .set_key_schema(Some(key_schema))
-            .set_attribute_definitions(Some(attrs))
-            .set_global_secondary_indexes(Some(gsis))
-            .set_local_secondary_indexes(Some(lsis));
+            .set_attribute_definitions(Some(attrs));
+
+        // Only set indexes if the vectors are not empty
+        if !gsis.is_empty() {
+            builder = builder.set_global_secondary_indexes(Some(gsis));
+        }
+        if !lsis.is_empty() {
+            builder = builder.set_local_secondary_indexes(Some(lsis));
+        }
 
         match config.throughput {
             Some(throughput) => {

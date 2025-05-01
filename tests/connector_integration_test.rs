@@ -48,3 +48,58 @@ async fn prod_config_should_return_correct_name_without_creating() -> Result<()>
 
     Ok(())
 }
+
+#[cfg(feature = "test_utils")]
+#[tokio::test]
+async fn simple_pk_table_should_allow_put() -> Result<()> {
+    // Define TableInfo inline for a simple table
+    let table_info = dynamodb_tools::TableInfo {
+        table_name: "simple_pk_test".to_string(),
+        pk: dynamodb_tools::TableAttr {
+            name: "id".to_string(),
+            attr_type: dynamodb_tools::AttrType::S,
+        },
+        sk: None,
+        attrs: vec![], // PK automatically included
+        gsis: vec![],
+        lsis: vec![],
+        throughput: None, // Use default PayPerRequest
+    };
+
+    // Create TableConfig using the inline TableInfo
+    let config = TableConfig {
+        table_name: "simple_pk_test".to_string(), // Base name, will get unique suffix
+        endpoint: Some("http://localhost:8000".to_string()),
+        region: "us-east-1".to_string(), // Example region
+        delete_on_exit: true,
+        info: Some(table_info),
+    };
+
+    let connector = DynamodbConnector::try_new(config).await?;
+    let table_name = connector.table_name().to_string();
+
+    assert!(table_name.starts_with("simple_pk_test-"));
+
+    // Prepare an item to put
+    let item_id = "test-item-1";
+    let item = std::collections::HashMap::from([(
+        "id".to_string(),
+        aws_sdk_dynamodb::types::AttributeValue::S(item_id.to_string()),
+    )]);
+
+    // Perform PutItem
+    let put_resp = connector
+        .client()?
+        .put_item()
+        .table_name(&table_name)
+        .set_item(Some(item))
+        .send()
+        .await;
+
+    // Check if PutItem was successful
+    assert!(put_resp.is_ok(), "PutItem failed: {:?}", put_resp.err());
+
+    // Optional: Add a GetItem check here if desired
+
+    Ok(())
+}

@@ -32,6 +32,21 @@ pub enum DynamoToolsError {
     #[error("AWS SDK error during table description: {0}")]
     TableDescribe(#[from] SdkError<DescribeTableError>),
 
+    #[error("Failed to read seed data file '{0}': {1}")]
+    SeedFileRead(String, #[source] std::io::Error),
+
+    #[error("Failed to parse seed data JSON file '{0}': {1}")]
+    SeedJsonParse(String, #[source] serde_json::Error),
+
+    #[error("Failed to convert seed data item to DynamoDB format: {0}")]
+    SeedDynamoConversion(#[from] serde_dynamo::Error),
+
+    #[error("Failed to batch write seed data to table '{0}': {1}")]
+    SeedBatchWrite(
+        String,
+        SdkError<aws_sdk_dynamodb::operation::batch_write_item::BatchWriteItemError>,
+    ),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }

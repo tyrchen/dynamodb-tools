@@ -1,7 +1,8 @@
 // tests/connector_integration_test.rs
-
-// Use the crate itself
-use dynamodb_tools::{AttrType, DynamodbConnector, Result, TableConfig, TableInfo};
+use aws_sdk_dynamodb::types::AttributeValue;
+use dynamodb_tools::{
+    AttrType, DynamoToolsError, DynamodbConnector, Result, TableConfig, TableInfo,
+};
 use std::collections::HashMap;
 
 // Note: Assumes DynamoDB Local is running at http://localhost:8000
@@ -63,6 +64,7 @@ async fn simple_pk_table_should_allow_put() -> Result<()> {
         gsis: vec![],
         lsis: vec![],
         throughput: None,
+        seed_data_file: None,
     };
 
     // Create TableConfig with a list containing the single table info
@@ -141,6 +143,54 @@ async fn multi_table_config_should_create_all_tables() -> Result<()> {
         .send()
         .await?;
     assert_eq!(resp2.table.unwrap().table_name.unwrap(), table2_name);
+
+    Ok(())
+}
+
+#[cfg(feature = "test_utils")]
+#[tokio::test]
+async fn dev_config_should_seed_data() -> Result<()> {
+    // dev.yml configures the 'users' table with seed_data_file: fixtures/seed_users.json
+    let config = TableConfig::load_from_file("fixtures/dev.yml")?;
+    let connector = DynamodbConnector::try_new(config).await?;
+
+    let table_name = connector.get_created_table_name("users").unwrap();
+
+    // Attempt to get one of the seeded items
+    let pk_val = "user_1";
+    let sk_val = "profile";
+
+    let resp = connector
+        .client()?
+        .get_item()
+        .table_name(table_name)
+        .key("pk", AttributeValue::S(pk_val.to_string()))
+        .key("sk", AttributeValue::S(sk_val.to_string()))
+        .send()
+        .await
+        .map_err(|e| DynamoToolsError::Internal(format!("GetItem failed: {}", e)))?;
+
+    // Check if the item was found and has expected data
+    match resp.item() {
+        Some(item) => {
+            assert_eq!(item.get("pk"), Some(&AttributeValue::S(pk_val.to_string())));
+            assert_eq!(item.get("sk"), Some(&AttributeValue::S(sk_val.to_string())));
+            assert_eq!(
+                item.get("name"),
+                Some(&AttributeValue::S("Alice".to_string()))
+            );
+            assert_eq!(
+                item.get("email"),
+                Some(&AttributeValue::S("alice@example.com".to_string()))
+            );
+        }
+        None => {
+            panic!(
+                "Seeded item user_1/profile not found in table {}",
+                table_name
+            );
+        }
+    }
 
     Ok(())
 }

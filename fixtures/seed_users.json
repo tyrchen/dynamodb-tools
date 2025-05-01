@@ -1,0 +1,19 @@
+[
+  {
+    "pk": "user_1",
+    "sk": "profile",
+    "name": "Alice",
+    "email": "alice@example.com"
+  },
+  {
+    "pk": "user_2",
+    "sk": "profile",
+    "name": "Bob",
+    "email": "bob@example.com"
+  },
+  {
+    "pk": "user_1",
+    "sk": "order_123",
+    "order_details": "Stuff"
+  }
+]

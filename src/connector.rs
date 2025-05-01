@@ -3,8 +3,10 @@ use crate::error::{DynamoToolsError, Result};
 use aws_config::meta::region::RegionProviderChain;
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_dynamodb::config::Credentials;
+use aws_sdk_dynamodb::types::{AttributeValue, PutRequest, WriteRequest};
 use aws_sdk_dynamodb::{Client, operation::create_table::CreateTableInput};
-use std::{collections::HashMap, path::Path};
+use serde_json::Value;
+use std::{collections::HashMap, fs, path::Path};
 #[cfg(feature = "test_utils")]
 use tokio::runtime::Runtime;
 
@@ -102,14 +104,12 @@ impl DynamodbConnector {
 
         let mut created_tables = HashMap::new();
 
-        // Iterate through table definitions and create each one
         for table_info in config.tables {
-            let base_table_name = table_info.table_name.clone(); // Keep original name for map key
+            let base_table_name = table_info.table_name.clone();
+            let seed_file = table_info.seed_data_file.clone(); // Clone seed file path
             let mut input = CreateTableInput::try_from(table_info)?;
 
-            // Generate unique name
             let unique_table_name = format!("{}-{}", base_table_name, xid::new());
-            // Overwrite table name in the input with the unique one
             input.table_name = Some(unique_table_name.clone());
 
             // Build the CreateTable request (logic adapted from previous version)
@@ -137,8 +137,56 @@ impl DynamodbConnector {
                 .await
                 .map_err(DynamoToolsError::TableCreation)?; // Propagate SDK errors, wrapped in our type
 
-            // Store the mapping
-            created_tables.insert(base_table_name, unique_table_name);
+            created_tables.insert(base_table_name.clone(), unique_table_name.clone());
+
+            // --- Seed Data ---
+            if let Some(file_path) = seed_file {
+                println!(
+                    "[INFO] Seeding data for table '{}' from file '{}'",
+                    unique_table_name, file_path
+                );
+                // Read file content
+                let content = fs::read_to_string(&file_path)
+                    .map_err(|e| DynamoToolsError::SeedFileRead(file_path.clone(), e))?;
+
+                // Parse JSON array
+                let items_json: Vec<Value> = serde_json::from_str(&content)
+                    .map_err(|e| DynamoToolsError::SeedJsonParse(file_path.clone(), e))?;
+
+                // Convert to WriteRequests
+                let mut write_requests = Vec::new();
+                for item_value in items_json {
+                    let item_map: HashMap<String, AttributeValue> =
+                        serde_dynamo::to_item(item_value)?;
+                    let put_request = PutRequest::builder()
+                        .set_item(Some(item_map))
+                        .build()
+                        .map_err(|e| {
+                            DynamoToolsError::Internal(format!("Failed to build PutRequest: {}", e))
+                        })?;
+                    write_requests.push(WriteRequest::builder().put_request(put_request).build());
+                }
+
+                // Batch write items (chunking by 25)
+                for chunk in write_requests.chunks(25) {
+                    let request_items =
+                        HashMap::from([(unique_table_name.clone(), chunk.to_vec())]);
+                    client
+                        .batch_write_item()
+                        .set_request_items(Some(request_items))
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            DynamoToolsError::SeedBatchWrite(unique_table_name.clone(), e)
+                        })?;
+                    println!(
+                        "[INFO] Wrote batch of {} items to table '{}'",
+                        chunk.len(),
+                        unique_table_name
+                    );
+                }
+            }
+            // --- End Seed Data ---
         }
 
         Ok(Self {

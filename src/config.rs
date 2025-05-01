@@ -60,6 +60,9 @@ pub struct TableInfo {
     /// Optional provisioned throughput settings. If `None`, uses Pay-Per-Request billing.
     #[serde(default)]
     pub throughput: Option<Throughput>,
+    /// Optional path to a JSON file containing an array of items to seed into the table after creation.
+    #[serde(default)]
+    pub seed_data_file: Option<String>,
 }
 
 /// Defines provisioned throughput settings (read/write capacity units).

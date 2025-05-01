@@ -10,6 +10,7 @@ tables:
     sk:
       name: sk
       type: S
+    seed_data_file: fixtures/seed_users.json
     attrs:
       - name: gsi1pk
         type: S

@@ -1,6 +1,6 @@
 ---
 table_name: users
-local_endpoint: http://localhost:8000
+endpoint: http://localhost:8000
 delete_on_exit: true
 info:
   table_name: users

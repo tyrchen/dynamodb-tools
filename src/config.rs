@@ -13,9 +13,12 @@ use std::{fs::File, io::BufReader, path::Path};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableConfig {
     pub table_name: String,
+    /// AWS region, if provided, dynamodb connector will connect to the region
+    #[serde(default = "default_aws_region")]
+    pub(crate) region: String,
     /// local endpoints, if provided, dynamodb connector will connect dynamodb local
     #[serde(default)]
-    pub(crate) local_endpoint: Option<String>,
+    pub(crate) endpoint: Option<String>,
     /// drop table when connector is dropped. Would only work if local_endpoint is provided
     #[serde(default)]
     pub(crate) delete_on_exit: bool,
@@ -79,6 +82,10 @@ pub struct TableLsi {
     pub sk: TableAttr,
     #[serde(default)]
     pub attrs: Vec<String>,
+}
+
+fn default_aws_region() -> String {
+    "us-east-1".to_string()
 }
 
 impl From<AttrType> for ScalarAttributeType {
@@ -254,11 +261,12 @@ impl TableConfig {
 
     pub fn new(
         table_name: String,
-        local_endpoint: Option<String>,
+        region: String,
+        endpoint: Option<String>,
         delete_on_exit: bool,
         info: Option<TableInfo>,
     ) -> Self {
-        let delete_on_exit = if local_endpoint.is_some() {
+        let delete_on_exit = if endpoint.is_some() {
             delete_on_exit
         } else {
             false
@@ -266,7 +274,8 @@ impl TableConfig {
 
         Self {
             table_name,
-            local_endpoint,
+            region,
+            endpoint,
             delete_on_exit,
             info,
         }
@@ -300,10 +309,7 @@ mod tests {
     fn config_could_be_loaded() {
         let config = TableConfig::load_from_file("fixtures/dev.yml").unwrap();
         assert_eq!(config.table_name, "users");
-        assert_eq!(
-            config.local_endpoint,
-            Some("http://localhost:8000".to_string())
-        );
+        assert_eq!(config.endpoint, Some("http://localhost:8000".to_string()));
         assert!(config.delete_on_exit);
         assert!(config.info.is_some());
 

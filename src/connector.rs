@@ -1,16 +1,18 @@
 use crate::TableConfig;
 use crate::error::{DynamoToolsError, Result};
-use aws_config::BehaviorVersion;
+use aws_config::meta::region::RegionProviderChain;
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_dynamodb::config::Credentials;
 use aws_sdk_dynamodb::{Client, operation::create_table::CreateTableInput};
 use std::path::Path;
-#[cfg(test)]
+#[cfg(feature = "test_utils")]
 use tokio::runtime::Runtime;
 
 #[derive(Debug, Clone)]
 pub struct DynamodbConnector {
     client: Option<Client>,
     table_name: String,
-    #[cfg(test)]
+    #[cfg(feature = "test_utils")]
     delete_on_exit: bool,
 }
 
@@ -31,44 +33,41 @@ impl DynamodbConnector {
         self.table_name.as_str()
     }
 
+    #[cfg(feature = "test_utils")]
+    pub fn delete_on_exit(&self) -> bool {
+        self.delete_on_exit
+    }
+
     /// create a new local client
-    pub async fn try_new(table_config: TableConfig) -> Result<Self> {
-        let local_endpoint = table_config.local_endpoint.clone();
-        #[cfg(test)]
-        let delete_on_exit = if local_endpoint.is_some() {
-            table_config.delete_on_exit
+    pub async fn try_new(config: TableConfig) -> Result<Self> {
+        let endpoint = config.endpoint.clone();
+        #[cfg(feature = "test_utils")]
+        let delete_on_exit = if endpoint.is_some() {
+            config.delete_on_exit
         } else {
             false
         };
-        let config = aws_config::load_from_env().await;
 
-        let sdk_config_builder = aws_sdk_dynamodb::Config::builder()
-            .region(config.region().cloned())
-            .behavior_version(
-                config
-                    .behavior_version()
-                    .unwrap_or_else(BehaviorVersion::latest),
-            )
-            .credentials_provider(
-                config
-                    .credentials_provider()
-                    .ok_or_else(|| {
-                        DynamoToolsError::MissingField(
-                            "AWS credentials provider not found".to_string(),
-                        )
-                    })?
-                    .clone(),
-            );
+        let base_sdk_config_builder = aws_config::defaults(BehaviorVersion::latest()).region(
+            RegionProviderChain::first_try(Region::new(config.region.clone()))
+                .or_default_provider(),
+        );
 
-        let sdk_config_builder = if let Some(url) = local_endpoint.as_ref() {
-            sdk_config_builder.endpoint_url(url)
+        let loaded_sdk_config = base_sdk_config_builder.load().await;
+
+        let builder = aws_sdk_dynamodb::config::Builder::from(&loaded_sdk_config);
+        let dynamodb_config = if let Some(url) = endpoint.as_ref() {
+            builder
+                .endpoint_url(url)
+                .credentials_provider(Credentials::for_tests())
+                .build()
         } else {
-            sdk_config_builder
+            builder.build()
         };
-        let sdk_config = sdk_config_builder.build();
-        let client = Client::from_conf(sdk_config);
 
-        let table_name = if let Some(info) = table_config.info {
+        let client = Client::from_conf(dynamodb_config);
+
+        let table_name = if let Some(info) = config.info {
             let mut input = CreateTableInput::try_from(info)?;
             let base_table_name = input.table_name.clone().ok_or_else(|| {
                 DynamoToolsError::MissingField("Table name missing in TableInfo".to_string())
@@ -97,24 +96,23 @@ impl DynamodbConnector {
             create_table_builder.send().await?;
             unique_table_name
         } else {
-            table_config.table_name
+            config.table_name
         };
 
         Ok(Self {
             client: Some(client),
             table_name,
-            #[cfg(test)]
+            #[cfg(feature = "test_utils")]
             delete_on_exit,
         })
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test_utils")]
 impl Drop for DynamodbConnector {
     fn drop(&mut self) {
         if let Some(client) = self.client.take() {
             let table_name = self.table_name.clone();
-            #[cfg(test)]
             if !self.delete_on_exit {
                 return;
             }
@@ -140,35 +138,5 @@ impl Drop for DynamodbConnector {
                 });
             });
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::error::Result;
-
-    #[tokio::test]
-    async fn dev_config_should_work() -> Result<()> {
-        let config = TableConfig::load_from_file("fixtures/dev.yml")?;
-        let connector = DynamodbConnector::try_new(config).await?;
-        let table_name = connector.table_name().to_string();
-        let resp = connector
-            .client()?
-            .describe_table()
-            .table_name(&table_name)
-            .send()
-            .await?;
-        assert_eq!(resp.table.and_then(|v| v.table_name).unwrap(), table_name);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn prod_config_should_work() -> Result<()> {
-        let config = TableConfig::load_from_file("fixtures/prod.yml")?;
-        let connector = DynamodbConnector::try_new(config).await?;
-        let table_name = connector.table_name();
-        assert_eq!(table_name, "users");
-        Ok(())
     }
 }

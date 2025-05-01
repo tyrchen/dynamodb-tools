@@ -14,8 +14,9 @@ categories = ["development-tools"]
 keywords = ["aws-sdk", "dynamodb", "testing"]
 
 [features]
-default = ["connector"]
+default = ["connector", "test_utils"]
 connector = ["aws-config", "xid"]
+test_utils = ["tokio"]
 
 [lints.clippy]
 result_large_err = "allow"
@@ -30,6 +31,10 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 xid = { version = "1", optional = true }
 thiserror = "2"
+tokio = { version = "1", features = [
+  "macros",
+  "rt-multi-thread",
+], optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

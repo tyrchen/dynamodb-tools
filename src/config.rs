@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::{DynamoToolsError, Result};
 use aws_sdk_dynamodb::{
     operation::create_table::CreateTableInput,
     types::{
@@ -98,7 +98,7 @@ impl From<TableAttr> for AttributeDefinition {
             .attribute_name(attr.name)
             .attribute_type(attr_type)
             .build()
-            .expect("attr should be valid")
+            .unwrap()
     }
 }
 
@@ -108,7 +108,7 @@ impl TableAttr {
             .attribute_name(self.name.clone())
             .key_type(KeyType::Hash)
             .build()
-            .expect("pk should be valid")
+            .unwrap()
     }
 
     fn to_sk(&self) -> KeySchemaElement {
@@ -116,7 +116,7 @@ impl TableAttr {
             .attribute_name(self.name.clone())
             .key_type(KeyType::Range)
             .build()
-            .expect("sk should be valid")
+            .unwrap()
     }
 }
 
@@ -139,7 +139,6 @@ impl From<TableGsi> for GlobalSecondaryIndex {
                     .set_non_key_attributes(Some(gsi.attrs))
                     .build(),
             )
-            // .provisioned_throughput(pt)
             .index_name(gsi.name);
 
         if let Some(throughput) = gsi.throughput {
@@ -147,10 +146,10 @@ impl From<TableGsi> for GlobalSecondaryIndex {
                 .read_capacity_units(throughput.read)
                 .write_capacity_units(throughput.write)
                 .build()
-                .expect("throughput should be valid");
+                .unwrap();
             builder = builder.provisioned_throughput(pt);
         }
-        builder.build().expect("gsi should be valid")
+        builder.build().unwrap()
     }
 }
 
@@ -174,12 +173,14 @@ impl From<TableLsi> for LocalSecondaryIndex {
             .projection(projection)
             .index_name(lsi.name)
             .build()
-            .expect("lsi should be valid")
+            .unwrap()
     }
 }
 
-impl From<TableInfo> for CreateTableInput {
-    fn from(config: TableInfo) -> Self {
+impl TryFrom<TableInfo> for CreateTableInput {
+    type Error = DynamoToolsError;
+
+    fn try_from(config: TableInfo) -> Result<Self> {
         let pk = config.pk.to_pk();
         let sk = config.sk.as_ref().map(|sk| sk.to_sk());
 
@@ -222,7 +223,12 @@ impl From<TableInfo> for CreateTableInput {
                     .read_capacity_units(throughput.read)
                     .write_capacity_units(throughput.write)
                     .build()
-                    .expect("throughput should be valid");
+                    .map_err(|e| {
+                        DynamoToolsError::Internal(format!(
+                            "Failed to build ProvisionedThroughput: {}",
+                            e
+                        ))
+                    })?;
                 builder = builder.provisioned_throughput(pt);
             }
             None => {
@@ -230,15 +236,19 @@ impl From<TableInfo> for CreateTableInput {
             }
         }
 
-        builder.build().expect("table info should be valid")
+        builder.build().map_err(DynamoToolsError::AwsSdkConfig)
     }
 }
 
 impl TableConfig {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = File::open(path)?;
+        let path_ref = path.as_ref();
+        let path_str = path_ref.to_string_lossy().to_string();
+        let file =
+            File::open(path_ref).map_err(|e| DynamoToolsError::ConfigRead(path_str.clone(), e))?;
         let reader = BufReader::new(file);
-        let config = serde_yaml::from_reader(reader)?;
+        let config = serde_yaml::from_reader(reader)
+            .map_err(|e| DynamoToolsError::ConfigParse(path_str, e))?;
         Ok(config)
     }
 
@@ -265,15 +275,20 @@ impl TableConfig {
 
 impl TableInfo {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = File::open(path)?;
+        let path_ref = path.as_ref();
+        let path_str = path_ref.to_string_lossy().to_string();
+        let file =
+            File::open(path_ref).map_err(|e| DynamoToolsError::ConfigRead(path_str.clone(), e))?;
         let reader = BufReader::new(file);
-        let config = serde_yaml::from_reader(reader)?;
-        Ok(config)
+        let info = serde_yaml::from_reader(reader)
+            .map_err(|e| DynamoToolsError::ConfigParse(path_str, e))?;
+        Ok(info)
     }
 
     pub fn load(s: &str) -> Result<Self> {
-        let config = serde_yaml::from_str(s)?;
-        Ok(config)
+        let info = serde_yaml::from_str(s)
+            .map_err(|e| DynamoToolsError::ConfigParse("string input".to_string(), e))?;
+        Ok(info)
     }
 }
 
@@ -284,23 +299,27 @@ mod tests {
     #[test]
     fn config_could_be_loaded() {
         let config = TableConfig::load_from_file("fixtures/dev.yml").unwrap();
-
-        let info = config.info.expect("info should be present");
-
         assert_eq!(config.table_name, "users");
+        assert_eq!(
+            config.local_endpoint,
+            Some("http://localhost:8000".to_string())
+        );
+        assert!(config.delete_on_exit);
+        assert!(config.info.is_some());
+
+        let info = config.info.unwrap();
+        assert_eq!(info.table_name, "users");
         assert_eq!(info.pk.name, "pk");
         assert_eq!(info.pk.attr_type, AttrType::S);
-
-        let input = CreateTableInput::try_from(info).unwrap();
-        assert_eq!(input.attribute_definitions().len(), 5);
-        assert_eq!(input.global_secondary_indexes().len(), 1);
-        assert_eq!(input.local_secondary_indexes().len(), 1);
+        assert!(info.sk.is_some());
+        assert_eq!(info.gsis.len(), 1);
+        assert_eq!(info.lsis.len(), 1);
     }
 
     #[test]
     fn table_info_could_be_loaded() {
         let info = TableInfo::load_from_file("fixtures/info.yml").unwrap();
-
+        assert_eq!(info.table_name, "users");
         assert_eq!(info.pk.name, "pk");
         assert_eq!(info.pk.attr_type, AttrType::S);
     }

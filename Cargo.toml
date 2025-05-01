@@ -17,6 +17,9 @@ keywords = ["aws-sdk", "dynamodb", "testing"]
 default = ["connector"]
 connector = ["aws-config", "xid"]
 
+[lints.clippy]
+result_large_err = "allow"
+
 [dependencies]
 anyhow = "1"
 aws-config = { version = "1", features = [
@@ -26,6 +29,7 @@ aws-sdk-dynamodb = "1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 xid = { version = "1", optional = true }
+thiserror = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

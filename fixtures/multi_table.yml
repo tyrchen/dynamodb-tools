@@ -1,0 +1,19 @@
+# fixtures/multi_table.yml
+region: us-west-2
+endpoint: http://localhost:8000
+delete_on_exit: true
+tables:
+  - table_name: multi_table_1 # Base name 1
+    pk:
+      name: id1
+      type: S
+  - table_name: multi_table_2 # Base name 2
+    pk:
+      name: id2
+      type: N
+    sk:
+      name: sort_key
+      type: S
+    attrs:
+      - name: data
+        type: S

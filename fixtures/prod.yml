@@ -1,3 +1,4 @@
 ---
-table_name: users
-delete_on_exit: true
+region: us-prod-1 # Example prod region
+# No endpoint, no delete_on_exit
+tables: [] # Empty list, no tables to create

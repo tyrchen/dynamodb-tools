@@ -1,150 +1,256 @@
 use crate::TableConfig;
-use anyhow::Result;
-use aws_config::BehaviorVersion;
-use aws_sdk_dynamodb::{operation::create_table::CreateTableInput, Client};
-use std::path::Path;
-#[cfg(test)]
+use crate::error::{DynamoToolsError, Result};
+use aws_config::meta::region::RegionProviderChain;
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_dynamodb::config::Credentials;
+use aws_sdk_dynamodb::types::{AttributeValue, PutRequest, WriteRequest};
+use aws_sdk_dynamodb::{Client, operation::create_table::CreateTableInput};
+use serde_json::Value;
+use std::{collections::HashMap, fs, path::Path};
+#[cfg(feature = "test_utils")]
 use tokio::runtime::Runtime;
 
-#[derive(Debug, Clone)]
+/// Provides a connection to DynamoDB, potentially managing test table lifecycles.
+///
+/// This struct encapsulates an AWS DynamoDB client (`aws_sdk_dynamodb::Client`).
+/// If configured with table definitions and a local `endpoint` in [`TableConfig`],
+/// it will create uniquely named tables upon construction.
+///
+/// If the `test_utils` feature is enabled and `delete_on_exit` is true in the
+/// configuration, the created tables will be automatically deleted when this
+/// connector is dropped.
+#[derive(Debug)]
 pub struct DynamodbConnector {
     client: Option<Client>,
-    table_name: String,
-    #[cfg(test)]
-    delete_on_exit: bool,
+    // Map base table name to actual unique table name created
+    created_tables: HashMap<String, String>,
+    // Keep track of the original config for Drop
+    #[cfg(feature = "test_utils")]
+    config: TableConfig,
 }
 
 impl DynamodbConnector {
-    /// Load dynamodb connector from configuration file
-    pub async fn load(config: impl AsRef<Path>) -> Result<Self> {
-        let config = TableConfig::load_from_file(config)?;
+    /// Creates a new connector by loading configuration from a YAML file.
+    ///
+    /// See [`TableConfig::load_from_file`] and [`DynamodbConnector::try_new`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if loading the config file fails or if creating the connector fails
+    /// (e.g., table creation fails, AWS configuration error).
+    pub async fn load(config_path: impl AsRef<Path>) -> Result<Self> {
+        let config = TableConfig::load_from_file(config_path)?;
         DynamodbConnector::try_new(config).await
     }
 
-    pub fn client(&self) -> &Client {
-        self.client.as_ref().expect("client should exists")
+    /// Returns a reference to the underlying `aws_sdk_dynamodb::Client`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` ([`DynamoToolsError::Internal`]) if the client has already been
+    /// taken (e.g., after `Drop` has started).
+    pub fn client(&self) -> Result<&Client> {
+        self.client
+            .as_ref()
+            .ok_or_else(|| DynamoToolsError::Internal("Client instance is missing".to_string()))
     }
 
-    pub fn table_name(&self) -> &str {
-        self.table_name.as_str()
+    /// Returns the unique name of a table created by this connector, given its base name.
+    ///
+    /// The `base_name` corresponds to the `table_name` field within [`TableInfo`]
+    /// in the configuration.
+    pub fn get_created_table_name(&self, base_name: &str) -> Option<&str> {
+        self.created_tables.get(base_name).map(|s| s.as_str())
     }
 
-    /// create a new local client
-    pub async fn try_new(table_config: TableConfig) -> Result<Self> {
-        let local_endpoint = table_config.local_endpoint.clone();
-        #[cfg(test)]
-        let delete_on_exit = if local_endpoint.is_some() {
-            table_config.delete_on_exit
+    /// Returns a map of all tables created by this connector.
+    /// Keys are the base names from the config, values are the unique created names.
+    pub fn get_all_created_table_names(&self) -> &HashMap<String, String> {
+        &self.created_tables
+    }
+
+    /// Creates a new connector based on the provided [`TableConfig`].
+    ///
+    /// - Sets up AWS SDK configuration.
+    /// - Creates a `aws_sdk_dynamodb::Client`.
+    /// - Iterates through `config.tables`. For each `TableInfo`:
+    ///   - Attempts to create a DynamoDB table with a unique name derived from `TableInfo.table_name`.
+    ///   - Stores the mapping from the base name to the unique name.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if AWS config fails, client creation fails, or any table creation fails.
+    pub async fn try_new(config: TableConfig) -> Result<Self> {
+        let endpoint = config.endpoint.clone();
+        // Store config for Drop
+        #[cfg(feature = "test_utils")]
+        let connector_config = config.clone();
+
+        let base_sdk_config_builder = aws_config::defaults(BehaviorVersion::latest()).region(
+            RegionProviderChain::first_try(Region::new(config.region.clone()))
+                .or_default_provider(),
+        );
+        let loaded_sdk_config = base_sdk_config_builder.load().await;
+        let builder = aws_sdk_dynamodb::config::Builder::from(&loaded_sdk_config);
+        let dynamodb_config = if let Some(url) = endpoint.as_ref() {
+            builder
+                .endpoint_url(url)
+                .credentials_provider(Credentials::for_tests())
+                .build()
         } else {
-            false
+            builder.build()
         };
-        let config = aws_config::load_from_env().await;
+        let client = Client::from_conf(dynamodb_config);
 
-        let config = aws_sdk_dynamodb::Config::builder()
-            .region(config.region().cloned())
-            .behavior_version(
-                config
-                    .behavior_version()
-                    .unwrap_or(BehaviorVersion::latest()),
-            )
-            .credentials_provider(
-                config
-                    .credentials_provider()
-                    .expect("cred should exists")
-                    .clone(),
-            );
+        let mut created_tables = HashMap::new();
 
-        let config = if let Some(url) = local_endpoint.as_ref() {
-            config.endpoint_url(url)
-        } else {
-            config
-        };
-        let client = Client::from_conf(config.build());
+        for table_info in config.tables {
+            let base_table_name = table_info.table_name.clone();
+            let seed_file = table_info.seed_data_file.clone(); // Clone seed file path
+            let mut input = CreateTableInput::try_from(table_info)?;
 
-        let table_name = if let Some(info) = table_config.info {
-            let mut input = CreateTableInput::try_from(info)?;
-            let table_name = format!(
-                "{}-{}",
-                input.table_name.expect("table name must exist"),
-                xid::new()
-            );
-            input.table_name = Some(table_name.clone());
+            let unique_table_name = format!("{}-{}", base_table_name, xid::new());
+            input.table_name = Some(unique_table_name.clone());
 
-            let mut req = client
+            // Build the CreateTable request (logic adapted from previous version)
+            let create_table_builder = client
                 .create_table()
-                .table_name(&table_name)
+                .table_name(&unique_table_name)
                 .set_key_schema(input.key_schema)
                 .set_attribute_definitions(input.attribute_definitions)
                 .set_global_secondary_indexes(input.global_secondary_indexes)
                 .set_local_secondary_indexes(input.local_secondary_indexes);
-            match input.provisioned_throughput {
-                Some(pt) => {
-                    req = req.provisioned_throughput(pt);
+
+            let create_table_builder = match input.provisioned_throughput {
+                Some(pt) => create_table_builder.provisioned_throughput(pt),
+                None => create_table_builder.billing_mode(input.billing_mode.ok_or_else(|| {
+                    DynamoToolsError::MissingField(format!(
+                        "Billing mode missing for table '{}' with no throughput",
+                        base_table_name
+                    ))
+                })?),
+            };
+
+            // Send the request
+            create_table_builder
+                .send()
+                .await
+                .map_err(DynamoToolsError::TableCreation)?; // Propagate SDK errors, wrapped in our type
+
+            created_tables.insert(base_table_name.clone(), unique_table_name.clone());
+
+            // --- Seed Data ---
+            if let Some(file_path) = seed_file {
+                println!(
+                    "[INFO] Seeding data for table '{}' from file '{}'",
+                    unique_table_name, file_path
+                );
+                // Read file content
+                let content = fs::read_to_string(&file_path)
+                    .map_err(|e| DynamoToolsError::SeedFileRead(file_path.clone(), e))?;
+
+                // Parse JSON array
+                let items_json: Vec<Value> = serde_json::from_str(&content)
+                    .map_err(|e| DynamoToolsError::SeedJsonParse(file_path.clone(), e))?;
+
+                // Convert to WriteRequests
+                let mut write_requests = Vec::new();
+                for item_value in items_json {
+                    let item_map: HashMap<String, AttributeValue> =
+                        serde_dynamo::to_item(item_value)?;
+                    let put_request = PutRequest::builder()
+                        .set_item(Some(item_map))
+                        .build()
+                        .map_err(|e| {
+                            DynamoToolsError::Internal(format!("Failed to build PutRequest: {}", e))
+                        })?;
+                    write_requests.push(WriteRequest::builder().put_request(put_request).build());
                 }
-                None => {
-                    req = req.billing_mode(input.billing_mode.expect("billing mode should exist"));
+
+                // Batch write items (chunking by 25)
+                for chunk in write_requests.chunks(25) {
+                    let request_items =
+                        HashMap::from([(unique_table_name.clone(), chunk.to_vec())]);
+                    client
+                        .batch_write_item()
+                        .set_request_items(Some(request_items))
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            DynamoToolsError::SeedBatchWrite(unique_table_name.clone(), e)
+                        })?;
+                    println!(
+                        "[INFO] Wrote batch of {} items to table '{}'",
+                        chunk.len(),
+                        unique_table_name
+                    );
                 }
             }
-            req.send().await?;
-            table_name
-        } else {
-            table_config.table_name
-        };
+            // --- End Seed Data ---
+        }
 
         Ok(Self {
             client: Some(client),
-            table_name,
-            #[cfg(test)]
-            delete_on_exit,
+            created_tables,
+            #[cfg(feature = "test_utils")]
+            config: connector_config,
         })
     }
 }
 
-#[cfg(test)]
+/// Best-effort table cleanup on drop (requires `test_utils` feature).
+///
+/// If `delete_on_exit` was true and an endpoint was configured,
+/// attempts to delete all tables created by this connector in background threads.
+#[cfg(feature = "test_utils")]
 impl Drop for DynamodbConnector {
     fn drop(&mut self) {
-        let client = self.client.take().expect("client");
-        let table_name = self.table_name.clone();
-        #[cfg(test)]
-        if !self.delete_on_exit {
+        // Check config before taking client
+        if !self.config.delete_on_exit || self.config.endpoint.is_none() {
+            println!(
+                "[INFO] Skipping delete on drop (delete_on_exit: {}, endpoint: {:?})",
+                self.config.delete_on_exit, self.config.endpoint
+            );
             return;
         }
-        std::thread::spawn(move || {
-            let rt = Runtime::new().expect("runtime");
-            rt.block_on(async move {
-                if let Err(e) = client.delete_table().table_name(&table_name).send().await {
-                    println!("failed to delete table: {:?}", e);
-                }
-            });
-        });
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+        if let Some(client) = self.client.take() {
+            // Clone map and config needed for threads
+            let tables_to_delete = self.created_tables.clone();
+            println!(
+                "[INFO] Drop: Attempting to delete tables: {:?}",
+                tables_to_delete.values()
+            );
 
-    #[tokio::test]
-    async fn dev_config_should_work() {
-        let config = TableConfig::load_from_file("fixtures/dev.yml").unwrap();
-        let connector = DynamodbConnector::try_new(config).await.unwrap();
-        let table_name = connector.table_name();
-        let resp = connector
-            .client()
-            .describe_table()
-            .table_name(table_name)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(resp.table.and_then(|v| v.table_name).unwrap(), table_name);
-    }
+            for (_base_name, unique_name) in tables_to_delete {
+                let client_clone = client.clone(); // Clone client for each thread
+                std::thread::spawn(move || {
+                    let rt = match Runtime::new() {
+                        Ok(rt) => rt,
+                        Err(e) => {
+                            eprintln!(
+                                "[ERROR] Failed to create Tokio runtime for table deletion: {}",
+                                e
+                            );
+                            return;
+                        }
+                    };
 
-    #[tokio::test]
-    async fn prod_config_should_work() {
-        let config = TableConfig::load_from_file("fixtures/prod.yml").unwrap();
-        let connector = DynamodbConnector::try_new(config).await.unwrap();
-        let table_name = connector.table_name();
-        assert_eq!(table_name, "users");
-        assert!(!connector.delete_on_exit);
+                    rt.block_on(async move {
+                        match client_clone
+                            .delete_table()
+                            .table_name(&unique_name)
+                            .send()
+                            .await
+                        {
+                            Ok(_) => println!("[INFO] Deleted table: {}", unique_name),
+                            Err(e) => {
+                                eprintln!("[ERROR] Failed to delete table '{}': {}", unique_name, e)
+                            }
+                        }
+                    });
+                });
+            }
+        }
     }
 }

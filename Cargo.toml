@@ -14,7 +14,7 @@ categories = ["development-tools"]
 keywords = ["aws-sdk", "dynamodb", "testing"]
 
 [features]
-default = ["connector", "test_utils"]
+default = ["connector"]
 connector = ["aws-config", "xid"]
 test_utils = ["tokio"]
 

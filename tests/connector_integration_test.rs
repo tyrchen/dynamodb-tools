@@ -1,8 +1,9 @@
 // tests/connector_integration_test.rs
+#![cfg(feature = "test_utils")]
 use aws_sdk_dynamodb::types::AttributeValue;
-use dynamodb_tools::{
-    AttrType, DynamoToolsError, DynamodbConnector, Result, TableConfig, TableInfo,
-};
+#[cfg(feature = "test_utils")]
+use dynamodb_tools::{AttrType, DynamoToolsError, TableInfo};
+use dynamodb_tools::{DynamodbConnector, Result, TableConfig};
 use std::collections::HashMap;
 
 // Note: Assumes DynamoDB Local is running at http://localhost:8000

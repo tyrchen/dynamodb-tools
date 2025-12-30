@@ -1,3 +1,8 @@
 /target
 /Cargo.lock
 .vscode
+
+# TDA workspace (auto-generated)
+.tda/cache/
+.tda/tasks/
+.tda/memory/

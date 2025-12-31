@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [Unreleased]
+
+### Changed
+
+- Migrated from deprecated `serde_yaml` (0.9.x) to `serde_yml` (0.0.12)
+- No breaking changes to public API or YAML configuration format
+- All YAML parsing functionality remains compatible
+
+---
 ## [0.5.0](https://github.com/tyrchen/dynamodb-tools/compare/v0.4.0..v0.5.0) - 2025-05-01
 
 ### Features

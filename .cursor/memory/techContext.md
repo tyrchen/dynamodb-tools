@@ -12,7 +12,7 @@
     *   `aws-sdk-dynamodb`: Official AWS SDK for DynamoDB.
     *   `aws-config`: For loading AWS credentials and configuration.
     *   `anyhow`: For error handling.
-    *   `serde` / `serde_yaml`: For configuration file parsing.
+    *   `serde` / `serde_yaml_ng`: For configuration file parsing.
     *   `xid`: For generating unique IDs (likely for table names).
     *   `tokio`: For async runtime and testing.
 

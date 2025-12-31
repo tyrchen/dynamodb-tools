@@ -335,7 +335,7 @@ impl TableConfig {
         let file =
             File::open(path_ref).map_err(|e| DynamoToolsError::ConfigRead(path_str.clone(), e))?;
         let reader = BufReader::new(file);
-        let config = serde_yaml::from_reader(reader)
+        let config = serde_yml::from_reader(reader)
             .map_err(|e| DynamoToolsError::ConfigParse(path_str, e))?;
         Ok(config)
     }
@@ -377,7 +377,7 @@ impl TableInfo {
         let file =
             File::open(path_ref).map_err(|e| DynamoToolsError::ConfigRead(path_str.clone(), e))?;
         let reader = BufReader::new(file);
-        let info = serde_yaml::from_reader(reader)
+        let info = serde_yml::from_reader(reader)
             .map_err(|e| DynamoToolsError::ConfigParse(path_str, e))?;
         Ok(info)
     }
@@ -408,7 +408,7 @@ impl TableInfo {
     /// assert!(table_info.sk.is_none());
     /// ```
     pub fn load(s: &str) -> Result<Self> {
-        let info = serde_yaml::from_str(s)
+        let info = serde_yml::from_str(s)
             .map_err(|e| DynamoToolsError::ConfigParse("string input".to_string(), e))?;
         Ok(info)
     }

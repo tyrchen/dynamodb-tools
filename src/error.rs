@@ -13,7 +13,7 @@ pub enum DynamoToolsError {
     ConfigRead(String, #[source] std::io::Error),
 
     #[error("Failed to parse configuration file '{0}': {1}")]
-    ConfigParse(String, #[source] serde_yaml::Error),
+    ConfigParse(String, #[source] serde_yml::Error),
 
     #[error("Failed to build AWS SDK config: {0}")]
     AwsSdkConfig(#[from] aws_sdk_dynamodb::error::BuildError),

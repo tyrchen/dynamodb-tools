@@ -1,0 +1,14 @@
+dynamodb-tools v0.5.0 (/Users/tchen/projects/mycode/rust/dynamodb-tools)
+├── anyhow v1.0.100
+├── aws-config v1.8.12
+├── aws-sdk-dynamodb v1.101.0
+├── serde v1.0.228
+├── serde_dynamo v4.3.0
+├── serde_json v1.0.148
+├── serde_yaml v0.9.34+deprecated
+├── thiserror v2.0.17
+├── tracing v0.1.44
+└── xid v1.1.1
+[dev-dependencies]
+├── serde_json v1.0.148 (*)
+└── tokio v1.48.0

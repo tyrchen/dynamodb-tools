@@ -57,7 +57,7 @@ impl DynamodbConnector {
 
     /// Returns the unique name of a table created by this connector, given its base name.
     ///
-    /// The `base_name` corresponds to the `table_name` field within [`TableInfo`]
+    /// The `base_name` corresponds to the `table_name` field within [`crate::TableInfo`]
     /// in the configuration.
     pub fn get_created_table_name(&self, base_name: &str) -> Option<&str> {
         self.created_tables.get(base_name).map(|s| s.as_str())
@@ -168,7 +168,9 @@ impl DynamodbConnector {
                 }
 
                 // Batch write items (chunking by 25)
-                for chunk in write_requests.chunks(25) {
+                let total_chunks = write_requests.len().div_ceil(25);
+                for (chunk_idx, chunk) in write_requests.chunks(25).enumerate() {
+                    let chunk_num = chunk_idx + 1;
                     let request_items =
                         HashMap::from([(unique_table_name.clone(), chunk.to_vec())]);
                     client
@@ -177,10 +179,18 @@ impl DynamodbConnector {
                         .send()
                         .await
                         .map_err(|e| {
-                            DynamoToolsError::SeedBatchWrite(unique_table_name.clone(), e)
+                            DynamoToolsError::SeedBatchWrite(
+                                format!(
+                                    "{} (chunk {}/{})",
+                                    unique_table_name, chunk_num, total_chunks
+                                ),
+                                e,
+                            )
                         })?;
                     println!(
-                        "[INFO] Wrote batch of {} items to table '{}'",
+                        "[INFO] Wrote batch {}/{} ({} items) to table '{}'",
+                        chunk_num,
+                        total_chunks,
                         chunk.len(),
                         unique_table_name
                     );

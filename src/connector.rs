@@ -57,7 +57,7 @@ impl DynamodbConnector {
 
     /// Returns the unique name of a table created by this connector, given its base name.
     ///
-    /// The `base_name` corresponds to the `table_name` field within [`TableInfo`]
+    /// The `base_name` corresponds to the `table_name` field within [`crate::TableInfo`]
     /// in the configuration.
     pub fn get_created_table_name(&self, base_name: &str) -> Option<&str> {
         self.created_tables.get(base_name).map(|s| s.as_str())
